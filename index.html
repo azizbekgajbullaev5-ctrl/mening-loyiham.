@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OAK Xalqaro Jurnallar — Maqola portali</title>
+    <meta
+      name="description"
+      content="OAK ro'yxatiga kirgan xalqaro jurnallar, maqola talablari va maqola yuborish formasi."
+    />
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <div class="brand">
+          <span class="brand-logo">📚</span>
+          <div>
+            <h1>OAK Xalqaro Jurnallar</h1>
+            <p class="brand-sub">Maqola tayyorlash va yuborish portali</p>
+          </div>
+        </div>
+        <nav class="main-nav">
+          <button class="nav-btn active" data-view="jurnallar">Jurnallar</button>
+          <button class="nav-btn" data-view="talablar">Maqola talablari</button>
+          <button class="nav-btn" data-view="yuborish">Maqola yuborish</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- ===== JURNALLAR RO'YXATI ===== -->
+      <section id="view-jurnallar" class="view active">
+        <div class="hero">
+          <h2>OAK ro'yxatidagi xalqaro jurnallar</h2>
+          <p>
+            Dissertatsiya natijalarini chop etish uchun tavsiya etilgan xalqaro
+            jurnallarni qidiring, soha va til bo'yicha filtrlang.
+          </p>
+        </div>
+
+        <div class="info-banner">
+          ℹ️ <b>OAK qoidasi:</b> PhD/DSc dissertatsiyasi uchun kamida 3 ta
+          maqola OAK ro'yxatidagi jurnallarda, shundan <b>1 tasi xorijiy</b>
+          (Scopus / Web of Science indeksli) jurnalda bo'lishi tavsiya etiladi.
+        </div>
+
+        <div class="tur-toggle" id="tur-toggle">
+          <button class="tur-btn active" data-tur="">Hammasi</button>
+          <button class="tur-btn" data-tur="Xalqaro">🌍 Xalqaro</button>
+          <button class="tur-btn" data-tur="Mahalliy">🇺🇿 Mahalliy</button>
+        </div>
+
+        <div class="filters">
+          <input
+            type="search"
+            id="qidiruv"
+            placeholder="🔎 Jurnal nomi, soha yoki davlat bo'yicha qidirish..."
+          />
+          <select id="filter-soha">
+            <option value="">Barcha sohalar</option>
+          </select>
+          <select id="filter-til">
+            <option value="">Barcha tillar</option>
+          </select>
+        </div>
+
+        <p class="natija-soni" id="natija-soni"></p>
+        <div class="cards" id="jurnallar-royxati"></div>
+      </section>
+
+      <!-- ===== MAQOLA TALABLARI / SHABLON ===== -->
+      <section id="view-talablar" class="view">
+        <div class="hero">
+          <h2>Maqola talablari va shabloni</h2>
+          <p>Xalqaro jurnallar uchun maqola tayyorlashning umumiy qoidalari.</p>
+        </div>
+
+        <div class="content-card">
+          <h3>📐 Umumiy tuzilish (IMRAD)</h3>
+          <ol class="struktura-royxat">
+            <li><b>Sarlavha (Title)</b> — qisqa, aniq va mazmunni aks ettiruvchi.</li>
+            <li><b>Mualliflar va mansublik (Affiliation)</b> — F.I.Sh., tashkilot, ORCID.</li>
+            <li><b>Annotatsiya (Abstract)</b> — 150–250 so'z, tadqiqot maqsadi, usuli, natijasi.</li>
+            <li><b>Kalit so'zlar (Keywords)</b> — 5–7 ta atama.</li>
+            <li><b>Kirish (Introduction)</b> — muammo, dolzarblik, maqsad.</li>
+            <li><b>Materiallar va usullar (Methods)</b> — tadqiqot metodologiyasi.</li>
+            <li><b>Natijalar (Results)</b> — olingan ma'lumotlar, jadval va grafiklar.</li>
+            <li><b>Muhokama (Discussion)</b> — natijalar talqini, taqqoslash.</li>
+            <li><b>Xulosa (Conclusion)</b> — asosiy topilmalar va istiqbol.</li>
+            <li><b>Adabiyotlar (References)</b> — iqtibos uslubiga (APA, IEEE, Vancouver) mos.</li>
+          </ol>
+        </div>
+
+        <div class="content-card">
+          <h3>✅ Texnik talablar</h3>
+          <ul class="check-royxat">
+            <li>Shrift: Times New Roman, 12 pt, qator oralig'i 1.5.</li>
+            <li>Hajmi: odatda 6–12 sahifa (jurnalga qarab).</li>
+            <li>Format: Microsoft Word (.docx) yoki LaTeX.</li>
+            <li>Original (plagiat) darajasi: kamida 75–85%.</li>
+            <li>Barcha jadval va rasmlar raqamlangan va izohlangan bo'lishi shart.</li>
+            <li>DOI va ISSN ko'rsatilgan ishonchli manbalar.</li>
+          </ul>
+        </div>
+
+        <div class="content-card">
+          <h3>⬇️ Maqola shabloni</h3>
+          <p>Quyidagi tugma orqali tayyor maqola shablonini yuklab oling:</p>
+          <button class="btn-primary" id="shablon-yuklash">
+            Maqola shablonini yuklab olish (.txt)
+          </button>
+        </div>
+      </section>
+
+      <!-- ===== MAQOLA YUBORISH FORMASI ===== -->
+      <section id="view-yuborish" class="view">
+        <div class="hero">
+          <h2>Maqola yuborish</h2>
+          <p>Maqola ma'lumotlarini to'ldiring va tanlangan jurnalga yuboring.</p>
+        </div>
+
+        <form id="maqola-form" class="content-card form">
+          <div class="form-row">
+            <label
+              >Muallif F.I.Sh. *
+              <input type="text" name="muallif" required placeholder="Aliyev Akmal Akmalovich" />
+            </label>
+            <label
+              >Email *
+              <input type="email" name="email" required placeholder="email@example.com" />
+            </label>
+          </div>
+
+          <div class="form-row">
+            <label
+              >Tashkilot
+              <input type="text" name="tashkilot" placeholder="Universitet / Institut nomi" />
+            </label>
+            <label
+              >Tanlangan jurnal *
+              <select name="jurnal" id="form-jurnal" required>
+                <option value="">— Jurnalni tanlang —</option>
+              </select>
+            </label>
+          </div>
+
+          <label
+            >Maqola sarlavhasi *
+            <input type="text" name="sarlavha" required placeholder="Maqolangiz nomi" />
+          </label>
+
+          <label
+            >Kalit so'zlar
+            <input type="text" name="kalit" placeholder="vergul bilan ajrating: ilm, tadqiqot, ..." />
+          </label>
+
+          <label
+            >Annotatsiya (Abstract) *
+            <textarea name="annotatsiya" rows="5" required placeholder="150–250 so'z..."></textarea>
+          </label>
+
+          <label class="checkbox-label">
+            <input type="checkbox" name="rozilik" required />
+            Maqola original ekanligini va talablarga mos kelishini tasdiqlayman.
+          </label>
+
+          <button type="submit" class="btn-primary">Maqolani yuborish</button>
+        </form>
+
+        <div id="yuborilgan-xabar" class="success-box" hidden></div>
+
+        <div class="content-card" id="arizalar-bloki" hidden>
+          <h3>📨 Yuborilgan arizalar</h3>
+          <div id="arizalar-royxati"></div>
+          <button class="btn-secondary" id="tozalash">Ro'yxatni tozalash</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Jurnal tafsilotlari modal oynasi -->
+    <div class="modal-overlay" id="modal" hidden>
+      <div class="modal">
+        <button class="modal-close" id="modal-close">✕</button>
+        <div id="modal-content"></div>
+      </div>
+    </div>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>
+          © 2026 OAK Xalqaro Jurnallar portali. Bu namuna ilova — rasmiy va to'liq
+          ro'yxat uchun
+          <a href="https://oak.uz" target="_blank" rel="noopener">oak.uz</a> saytiga
+          murojaat qiling.
+        </p>
+      </div>
+    </footer>
+
+    <script src="assets/journals.js"></script>
+    <script src="assets/app.js"></script>
+  </body>
+</html>
