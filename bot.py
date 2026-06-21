@@ -26,6 +26,7 @@ import store
 from article_generator import ArticleRequest, generate_article
 from docx_builder import build_docx
 from pdf_builder import build_pdf
+from fulfillment import deliver_order
 from locales import LANGUAGES, t
 
 logging.basicConfig(level=logging.INFO)
@@ -92,6 +93,13 @@ async def on_language(callback: CallbackQuery, state: FSMContext) -> None:
 async def cmd_help(message: Message) -> None:
     lang = get_lang(message.from_user.id)
     await message.answer(t(lang, "help", price=fmt_sum(config.PRICE_PER_PAGE)))
+
+
+@dp.message(Command("id"))
+async def cmd_id(message: Message) -> None:
+    """Foydalanuvchining Telegram ID sini ko'rsatadi (admin sozlash uchun)."""
+    lang = get_lang(message.from_user.id)
+    await message.answer(t(lang, "your_id", id=message.from_user.id))
 
 
 @dp.message(Command("status"))
@@ -288,65 +296,130 @@ async def _start_method(
 
 @dp.message(Form.payment, F.photo)
 async def on_receipt(message: Message, state: FSMContext) -> None:
-    """To'lov cheki (rasm) kelganda maqolani tayyorlaydi va yuboradi."""
+    """To'lov cheki (rasm) kelganda buyurtmani ro'yxatga oladi.
+
+    ADMIN_CHAT_ID sozlangan bo'lsa — chek admin (egasi) ga tasdiqlash uchun
+    yuboriladi va maqola faqat admin tasdiqlagandan keyin tayyorlanadi.
+    Aks holda (admin sozlanmagan) — eski avtomatik oqim ishlaydi.
+    """
     lang = get_lang(message.from_user.id)
     data = await state.get_data()
     await state.clear()
 
-    # Chekni admin (egasi) ga yuborish — yozuv qolishi uchun (ixtiyoriy)
+    pages = int(data.get("pages", 5))
+    total = int(data.get("total", pages * config.PRICE_PER_PAGE))
+    order_id = await store.create_order(
+        {
+            "user_id": message.from_user.id,
+            "chat_id": message.chat.id,
+            "lang": lang,
+            "topic": data.get("topic", ""),
+            "field": data.get("field", ""),
+            "author": data.get("author", ""),
+            "keywords": data.get("keywords", ""),
+            "pages": pages,
+            "amount": total,
+        }
+    )
+
     if config.ADMIN_CHAT_ID:
+        user = message.from_user
+        uname = f"@{user.username}" if user.username else user.full_name
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=t("uz", "btn_approve"),
+                        callback_data=f"approve:{order_id}",
+                    ),
+                    InlineKeyboardButton(
+                        text=t("uz", "btn_reject"),
+                        callback_data=f"reject:{order_id}",
+                    ),
+                ]
+            ]
+        )
         try:
-            user = message.from_user
-            uname = f"@{user.username}" if user.username else user.full_name
             await message.bot.send_photo(
                 config.ADMIN_CHAT_ID,
                 message.photo[-1].file_id,
                 caption=t(
-                    lang,
+                    "uz",
                     "receipt_forwarded",
                     user=html.escape(uname),
                     topic=html.escape(data.get("topic", "")[:120]),
-                    pages=data.get("pages", "—"),
-                    total=fmt_sum(data.get("total", 0)),
+                    pages=pages,
+                    total=fmt_sum(total),
                 ),
+                reply_markup=kb,
             )
+            await message.answer(t(lang, "receipt_pending"))
+            return
         except Exception:  # noqa: BLE001
             logger.warning("Chekni adminga yuborib bo'lmadi", exc_info=True)
+            # Admin'ga yuborilmasa — mijoz kutib qolmasligi uchun avtomatik davom
 
+    # Admin sozlanmagan (yoki yuborib bo'lmadi) — avtomatik tayyorlanadi
+    await store.set_status(order_id, store.PAID, paid=True)
     await message.answer(t(lang, "receipt_ok"))
-    status = await message.answer(t(lang, "generating"))
+    await deliver_order(message.bot, order_id)
 
-    req = ArticleRequest(
-        topic=data.get("topic", ""),
-        field=data.get("field", ""),
-        author=data.get("author", ""),
-        keywords=data.get("keywords", ""),
-        lang=lang,
-        pages=int(data.get("pages", 5)),
-    )
 
-    try:
-        article = await generate_article(req)
-        docx_stream = build_docx(article, req.author, lang)
-        pdf_stream = build_pdf(article, req.author, lang)
-    except Exception as err:  # noqa: BLE001
-        logger.exception("Maqola generatsiyasida xatolik")
-        await status.edit_text(t(lang, "error", err=html.escape(str(err)[:300])))
+@dp.callback_query(F.data.startswith("approve:"))
+async def on_approve(callback: CallbackQuery) -> None:
+    """Admin chekni tasdiqlaydi — maqola tayyorlanib mijozga yuboriladi."""
+    if not config.ADMIN_CHAT_ID or callback.from_user.id != config.ADMIN_CHAT_ID:
+        await callback.answer(t("uz", "stats_denied"), show_alert=True)
         return
+    order_id = callback.data.split(":", 1)[1]
+    order = await store.get_order(order_id)
+    if not order:
+        await callback.answer("Buyurtma topilmadi", show_alert=True)
+        return
+    if order["status"] != store.CREATED:
+        await callback.answer(t("uz", "already_handled"), show_alert=True)
+        return
+    await callback.answer(t("uz", "admin_approved"))
+    if callback.message:
+        try:
+            await callback.message.edit_caption(
+                (callback.message.caption or "") + "\n\n" + t("uz", "admin_approved")
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    await store.set_status(order_id, store.PAID, paid=True)
+    await deliver_order(callback.bot, order_id)
 
-    await status.edit_text(t(lang, "done_text"))
-    await message.answer(_preview(article, lang))
 
-    title = article.get("title", {}).get(lang) or article.get("title", {}).get("uz", "maqola")
-    fname = _safe_filename(title)
-    await message.answer_document(
-        BufferedInputFile(docx_stream.read(), filename=fname + ".docx"),
-        caption=t(lang, "docx_caption"),
-    )
-    await message.answer_document(
-        BufferedInputFile(pdf_stream.read(), filename=fname + ".pdf"),
-        caption=t(lang, "pdf_caption"),
-    )
+@dp.callback_query(F.data.startswith("reject:"))
+async def on_reject(callback: CallbackQuery) -> None:
+    """Admin chekni rad etadi — mijozga xabar beriladi."""
+    if not config.ADMIN_CHAT_ID or callback.from_user.id != config.ADMIN_CHAT_ID:
+        await callback.answer(t("uz", "stats_denied"), show_alert=True)
+        return
+    order_id = callback.data.split(":", 1)[1]
+    order = await store.get_order(order_id)
+    if not order:
+        await callback.answer("Buyurtma topilmadi", show_alert=True)
+        return
+    if order["status"] != store.CREATED:
+        await callback.answer(t("uz", "already_handled"), show_alert=True)
+        return
+    await store.set_status(order_id, store.CANCELLED)
+    await callback.answer(t("uz", "admin_rejected"))
+    if callback.message:
+        try:
+            await callback.message.edit_caption(
+                (callback.message.caption or "") + "\n\n" + t("uz", "admin_rejected")
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        await callback.bot.send_message(
+            order["chat_id"], t(order["lang"], "payment_rejected")
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @dp.message(Form.payment)
