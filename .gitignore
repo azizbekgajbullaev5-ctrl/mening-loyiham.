@@ -1,0 +1,24 @@
+# Sirlar / Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Yaratilgan fayllar / Generated files
+*.docx
+out/
+tmp/
+
+# Ma'lumotlar bazasi / Database
+*.db
+*.db-wal
+*.db-shm
+
+# IDE
+.vscode/
+.idea/
