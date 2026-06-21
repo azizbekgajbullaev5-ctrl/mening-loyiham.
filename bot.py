@@ -25,6 +25,7 @@ import payments
 import store
 from article_generator import ArticleRequest, generate_article
 from docx_builder import build_docx
+from pdf_builder import build_pdf
 from locales import LANGUAGES, t
 
 logging.basicConfig(level=logging.INFO)
@@ -91,6 +92,47 @@ async def on_language(callback: CallbackQuery, state: FSMContext) -> None:
 async def cmd_help(message: Message) -> None:
     lang = get_lang(message.from_user.id)
     await message.answer(t(lang, "help", price=fmt_sum(config.PRICE_PER_PAGE)))
+
+
+@dp.message(Command("status"))
+async def cmd_status(message: Message) -> None:
+    lang = get_lang(message.from_user.id)
+    orders = await store.orders_by_user(message.from_user.id, limit=5)
+    if not orders:
+        await message.answer(t(lang, "status_empty"))
+        return
+    lines = [t(lang, "status_header")]
+    for o in orders:
+        lines.append(
+            t(
+                lang,
+                "status_line",
+                topic=html.escape((o["topic"] or "")[:40]),
+                pages=o["pages"],
+                total=fmt_sum(o["amount"]),
+                status=t(lang, f"st_{o['status']}"),
+            )
+        )
+    await message.answer("\n\n".join(lines))
+
+
+@dp.message(Command("stats"))
+async def cmd_stats(message: Message) -> None:
+    lang = get_lang(message.from_user.id)
+    if not config.ADMIN_CHAT_ID or message.from_user.id != config.ADMIN_CHAT_ID:
+        await message.answer(t(lang, "stats_denied"))
+        return
+    s = await store.stats()
+    await message.answer(
+        t(
+            lang,
+            "stats_body",
+            total=s["total_orders"],
+            paid=s["paid"],
+            delivered=s["delivered"],
+            revenue=fmt_sum(s["revenue"]),
+        )
+    )
 
 
 @dp.message(Command("cancel"))
@@ -286,6 +328,7 @@ async def on_receipt(message: Message, state: FSMContext) -> None:
     try:
         article = await generate_article(req)
         docx_stream = build_docx(article, req.author, lang)
+        pdf_stream = build_pdf(article, req.author, lang)
     except Exception as err:  # noqa: BLE001
         logger.exception("Maqola generatsiyasida xatolik")
         await status.edit_text(t(lang, "error", err=html.escape(str(err)[:300])))
@@ -295,10 +338,14 @@ async def on_receipt(message: Message, state: FSMContext) -> None:
     await message.answer(_preview(article, lang))
 
     title = article.get("title", {}).get(lang) or article.get("title", {}).get("uz", "maqola")
-    filename = _safe_filename(title) + ".docx"
+    fname = _safe_filename(title)
     await message.answer_document(
-        BufferedInputFile(docx_stream.read(), filename=filename),
+        BufferedInputFile(docx_stream.read(), filename=fname + ".docx"),
         caption=t(lang, "docx_caption"),
+    )
+    await message.answer_document(
+        BufferedInputFile(pdf_stream.read(), filename=fname + ".pdf"),
+        caption=t(lang, "pdf_caption"),
     )
 
 

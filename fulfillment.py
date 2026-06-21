@@ -10,6 +10,7 @@ from aiogram.types import BufferedInputFile
 import store
 from article_generator import ArticleRequest, generate_article
 from docx_builder import build_docx
+from pdf_builder import build_pdf
 from locales import t
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ async def deliver_order(bot: Bot, order_id: str) -> None:
         )
         article = await generate_article(req)
         docx_stream = build_docx(article, req.author, lang)
+        pdf_stream = build_pdf(article, req.author, lang)
 
         await status.edit_text(t(lang, "done_text"))
         await bot.send_message(chat_id, _preview(article, lang))
@@ -76,10 +78,16 @@ async def deliver_order(bot: Bot, order_id: str) -> None:
         title = article.get("title", {}).get(lang) or article.get("title", {}).get(
             "uz", "maqola"
         )
+        fname = _safe_filename(title)
         await bot.send_document(
             chat_id,
-            BufferedInputFile(docx_stream.read(), filename=_safe_filename(title) + ".docx"),
+            BufferedInputFile(docx_stream.read(), filename=fname + ".docx"),
             caption=t(lang, "docx_caption"),
+        )
+        await bot.send_document(
+            chat_id,
+            BufferedInputFile(pdf_stream.read(), filename=fname + ".pdf"),
+            caption=t(lang, "pdf_caption"),
         )
         await store.set_status(order_id, store.DELIVERED, delivered=True)
     except Exception as err:  # noqa: BLE001

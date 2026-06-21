@@ -136,6 +136,39 @@ def _set_click_prepare(order_id: str, prepare_id: str) -> None:
         )
 
 
+def _orders_by_user(user_id: int, limit: int = 5) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM orders WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _stats() -> dict:
+    paid_states = (PAID, DELIVERING, DELIVERED)
+    with _connect() as conn:
+        total_orders = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+        delivered = conn.execute(
+            "SELECT COUNT(*) FROM orders WHERE status=?", (DELIVERED,)
+        ).fetchone()[0]
+        paid_cnt = conn.execute(
+            f"SELECT COUNT(*) FROM orders WHERE status IN ({','.join('?'*len(paid_states))})",
+            paid_states,
+        ).fetchone()[0]
+        revenue = conn.execute(
+            f"SELECT COALESCE(SUM(amount),0) FROM orders "
+            f"WHERE status IN ({','.join('?'*len(paid_states))})",
+            paid_states,
+        ).fetchone()[0]
+    return {
+        "total_orders": total_orders,
+        "paid": paid_cnt,
+        "delivered": delivered,
+        "revenue": revenue,
+    }
+
+
 # --- Payme tranzaksiyalari ---
 def _payme_get_by_id(payme_id: str) -> Optional[dict]:
     with _connect() as conn:
@@ -201,6 +234,14 @@ async def try_begin_delivery(order_id: str) -> bool:
 
 async def set_click_prepare(order_id: str, prepare_id: str) -> None:
     await asyncio.to_thread(_set_click_prepare, order_id, prepare_id)
+
+
+async def orders_by_user(user_id: int, limit: int = 5) -> list[dict]:
+    return await asyncio.to_thread(_orders_by_user, user_id, limit)
+
+
+async def stats() -> dict:
+    return await asyncio.to_thread(_stats)
 
 
 # Payme — webhook sinxron ishlagani uchun sync funksiyalar ham ochiq qoladi

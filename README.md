@@ -11,7 +11,7 @@ Interfeys ikki tilda: 🇺🇿 o'zbekcha va 🇷🇺 ruscha.
 - ОАК tuzilmasiga mos maqola: UDK, sarlavha, annotatsiya va kalit so'zlar
   (uz/ru/en), kirish, asosiy qism, natijalar, xulosa, foydalanilgan adabiyotlar.
 - Universal — har qanday ilmiy soha uchun.
-- Tayyor maqola Word (.docx) hujjatida (Times New Roman, 14pt, OAK uslubi).
+- Tayyor maqola **Word (.docx)** va **PDF** hujjatlarida (OAK uslubi).
 - Til tanlash (o'zbekcha / ruscha).
 - 💳 **To'lov tizimi**: mijoz maqola hajmini (1–15 bet) tanlaydi, har bet
   uchun belgilangan narx (standart **5 000 so'm**) hisoblanadi. Uch xil to'lov:
@@ -97,6 +97,8 @@ kabinetida quyidagi URL larni ko'rsating:
 | --------- | --------------------------------- |
 | `/start`  | Boshlash va til tanlash           |
 | `/new`    | Yangi ilmiy maqola yozish         |
+| `/status` | Buyurtmalaringiz holati           |
+| `/stats`  | Statistika (faqat admin)          |
 | `/lang`   | Interfeys tilini o'zgartirish     |
 | `/cancel` | Joriy jarayonni bekor qilish      |
 | `/help`   | Yordam                            |
@@ -107,11 +109,13 @@ kabinetida quyidagi URL larni ko'rsating:
 bot.py                # Telegram bot (aiogram 3.x), FSM + webhook server
 article_generator.py  # Claude API orqali maqola generatsiyasi
 docx_builder.py       # Maqoladan Word (.docx) hujjat tuzish
+pdf_builder.py        # Maqoladan PDF hujjat tuzish (fpdf2 + DejaVu)
 payments.py           # Payme/Click to'lov havolalari va webhook'lari
 store.py              # Buyurtmalar va tranzaksiyalar (SQLite)
 fulfillment.py        # To'lovdan keyin maqolani yaratib yetkazish
 locales.py            # O'zbekcha / ruscha matnlar
 config.py             # Muhit o'zgaruvchilari
+assets/fonts/         # PDF uchun DejaVu shriftlari (kirill/lotin)
 ```
 
 ## ⚠️ Eslatma
