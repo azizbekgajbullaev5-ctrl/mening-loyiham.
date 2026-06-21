@@ -89,6 +89,11 @@ class ArticleRequest:
     author: str
     keywords: str
     lang: str  # interfeys/tana tili: "uz" yoki "ru"
+    pages: int = 5  # maqola hajmi (bet soni)
+
+
+# Bir A4 bet taxminan shuncha so'z (Times New Roman 14pt) — hajmni shunga moslaymiz
+WORDS_PER_PAGE = 450
 
 
 def _build_prompt(req: ArticleRequest) -> str:
@@ -103,13 +108,17 @@ def _build_prompt(req: ArticleRequest) -> str:
         if req.author and req.author.strip() not in {"—", "-"}
         else "Muallif ko'rsatilmagan."
     )
+    target_words = max(1, req.pages) * WORDS_PER_PAGE
     return (
         "Siz O'zbekiston Oliy attestatsiya komissiyasi (OAK/ВАК) talablariga "
         "to'liq mos ilmiy maqola yozadigan tajribali ilmiy muharrirsiz.\n\n"
         f"MAVZU: {req.topic}\n"
         f"ILMIY SOHA: {req.field}\n"
         f"{author_note}\n"
-        f"{keywords_note}\n\n"
+        f"{keywords_note}\n"
+        f"HAJM: maqola taxminan {req.pages} ta A4 bet bo'lsin, ya'ni asosiy matn "
+        f"(kirish + asosiy qism + natijalar + xulosa) jami taxminan {target_words} "
+        "so'zdan iborat bo'lsin. Bo'limlarni shu hajmga mutanosib taqsimlang.\n\n"
         f"Maqolaning asosiy matnini {body_lang} yozing. "
         "Annotatsiya va kalit so'zlarni esa UCHTA tilda bering: "
         "o'zbek (uz), rus (ru) va ingliz (en).\n\n"
@@ -133,9 +142,12 @@ async def generate_article(req: ArticleRequest) -> dict:
     """Maqolani generatsiya qiladi va bo'limlar dict'ini qaytaradi."""
     prompt = _build_prompt(req)
 
+    # Hajmga qarab max_tokens ni moslaymiz (kirill matn so'ziga ~2.5 token).
+    max_tokens = min(48000, 6000 + max(1, req.pages) * WORDS_PER_PAGE * 3)
+
     async with _client.messages.stream(
         model=config.CLAUDE_MODEL,
-        max_tokens=16000,
+        max_tokens=max_tokens,
         thinking={"type": "adaptive"},
         output_config={
             "effort": "high",

@@ -13,6 +13,22 @@ Interfeys ikki tilda: 🇺🇿 o'zbekcha va 🇷🇺 ruscha.
 - Universal — har qanday ilmiy soha uchun.
 - Tayyor maqola Word (.docx) hujjatida (Times New Roman, 14pt, OAK uslubi).
 - Til tanlash (o'zbekcha / ruscha).
+- 💳 **To'lov tizimi**: mijoz maqola hajmini (1–15 bet) tanlaydi, har bet
+  uchun belgilangan narx (standart **5 000 so'm**) hisoblanadi. Mijoz plastik
+  kartaga to'lov qilib, **chekni (rasm)** botga yuboradi — shundan keyin maqola
+  avtomatik tayyorlanadi. Chek nusxasi (ixtiyoriy) bot egasiga ham yuboriladi.
+
+## 💳 To'lov jarayoni
+
+1. Mijoz mavzu, soha, muallif, kalit so'zlar va **bet sonini (1–15)** kiritadi.
+2. Bot jami summani hisoblaydi (`bet × narx`) va sizning **karta raqamingizni**
+   ko'rsatadi.
+3. Mijoz kartangizga pul o'tkazadi va **to'lov chekini rasm ko'rinishida** yuboradi.
+4. Chek kelishi bilan maqola yoziladi va Word faylda qaytariladi.
+
+> Narx, bet chegaralari va karta ma'lumotlari `.env` orqali sozlanadi
+> (`PRICE_PER_PAGE`, `MIN_PAGES`, `MAX_PAGES`, `PAYMENT_CARD_NUMBER`,
+> `PAYMENT_CARD_HOLDER`, `ADMIN_CHAT_ID`).
 
 ## 🚀 O'rnatish
 
@@ -32,6 +48,11 @@ Interfeys ikki tilda: 🇺🇿 o'zbekcha va 🇷🇺 ruscha.
    - `TELEGRAM_BOT_TOKEN` — [@BotFather](https://t.me/BotFather) dan oling.
    - `ANTHROPIC_API_KEY` — [console.anthropic.com](https://console.anthropic.com) dan oling.
    - `CLAUDE_MODEL` — ixtiyoriy (standart: `claude-opus-4-8`).
+   - `PAYMENT_CARD_NUMBER`, `PAYMENT_CARD_HOLDER` — to'lov qabul qiladigan kartangiz.
+   - `PRICE_PER_PAGE` — bir bet narxi (standart `5000`).
+   - `MIN_PAGES`, `MAX_PAGES` — bet chegaralari (standart `1`–`15`).
+   - `ADMIN_CHAT_ID` — cheklar yuboriladigan Telegram ID ingiz (ixtiyoriy,
+     [@userinfobot](https://t.me/userinfobot) orqali bilib oling).
 
 3. Botni ishga tushiring:
 

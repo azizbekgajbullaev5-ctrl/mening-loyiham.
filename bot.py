@@ -40,6 +40,13 @@ class Form(StatesGroup):
     field = State()
     author = State()
     keywords = State()
+    pages = State()
+    payment = State()
+
+
+def fmt_sum(value: int) -> str:
+    """1000000 -> '1 000 000' ko'rinishida formatlash."""
+    return f"{value:,}".replace(",", " ")
 
 
 def language_keyboard() -> InlineKeyboardMarkup:
@@ -79,7 +86,7 @@ async def on_language(callback: CallbackQuery, state: FSMContext) -> None:
 @dp.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     lang = get_lang(message.from_user.id)
-    await message.answer(t(lang, "help"))
+    await message.answer(t(lang, "help", price=fmt_sum(config.PRICE_PER_PAGE)))
 
 
 @dp.message(Command("cancel"))
@@ -125,9 +132,72 @@ async def step_author(message: Message, state: FSMContext) -> None:
 async def step_keywords(message: Message, state: FSMContext) -> None:
     lang = get_lang(message.from_user.id)
     await state.update_data(keywords=message.text or "")
+    await state.set_state(Form.pages)
+    await message.answer(
+        t(
+            lang,
+            "ask_pages",
+            min=config.MIN_PAGES,
+            max=config.MAX_PAGES,
+            price=fmt_sum(config.PRICE_PER_PAGE),
+        )
+    )
+
+
+@dp.message(Form.pages)
+async def step_pages(message: Message, state: FSMContext) -> None:
+    lang = get_lang(message.from_user.id)
+    raw = (message.text or "").strip()
+    if not raw.isdigit() or not (config.MIN_PAGES <= int(raw) <= config.MAX_PAGES):
+        await message.answer(
+            t(lang, "invalid_pages", min=config.MIN_PAGES, max=config.MAX_PAGES)
+        )
+        return
+
+    pages = int(raw)
+    total = pages * config.PRICE_PER_PAGE
+    await state.update_data(pages=pages, total=total)
+    await state.set_state(Form.payment)
+    await message.answer(
+        t(
+            lang,
+            "payment_info",
+            pages=pages,
+            total=fmt_sum(total),
+            card=config.PAYMENT_CARD_NUMBER,
+            holder=config.PAYMENT_CARD_HOLDER or "—",
+        )
+    )
+
+
+@dp.message(Form.payment, F.photo)
+async def on_receipt(message: Message, state: FSMContext) -> None:
+    """To'lov cheki (rasm) kelganda maqolani tayyorlaydi va yuboradi."""
+    lang = get_lang(message.from_user.id)
     data = await state.get_data()
     await state.clear()
 
+    # Chekni admin (egasi) ga yuborish — yozuv qolishi uchun (ixtiyoriy)
+    if config.ADMIN_CHAT_ID:
+        try:
+            user = message.from_user
+            uname = f"@{user.username}" if user.username else user.full_name
+            await message.bot.send_photo(
+                config.ADMIN_CHAT_ID,
+                message.photo[-1].file_id,
+                caption=t(
+                    lang,
+                    "receipt_forwarded",
+                    user=html.escape(uname),
+                    topic=html.escape(data.get("topic", "")[:120]),
+                    pages=data.get("pages", "—"),
+                    total=fmt_sum(data.get("total", 0)),
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("Chekni adminga yuborib bo'lmadi", exc_info=True)
+
+    await message.answer(t(lang, "receipt_ok"))
     status = await message.answer(t(lang, "generating"))
 
     req = ArticleRequest(
@@ -136,6 +206,7 @@ async def step_keywords(message: Message, state: FSMContext) -> None:
         author=data.get("author", ""),
         keywords=data.get("keywords", ""),
         lang=lang,
+        pages=int(data.get("pages", 5)),
     )
 
     try:
@@ -155,6 +226,13 @@ async def step_keywords(message: Message, state: FSMContext) -> None:
         BufferedInputFile(docx_stream.read(), filename=filename),
         caption=t(lang, "docx_caption"),
     )
+
+
+@dp.message(Form.payment)
+async def payment_need_receipt(message: Message) -> None:
+    """To'lov bosqichida rasmdan boshqa narsa kelsa — chek so'rash."""
+    lang = get_lang(message.from_user.id)
+    await message.answer(t(lang, "need_receipt"))
 
 
 def _preview(article: dict, lang: str) -> str:
