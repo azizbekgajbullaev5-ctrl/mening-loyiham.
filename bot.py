@@ -18,8 +18,11 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     Message,
 )
+from aiohttp import web
 
 import config
+import payments
+import store
 from article_generator import ArticleRequest, generate_article
 from docx_builder import build_docx
 from locales import LANGUAGES, t
@@ -41,6 +44,7 @@ class Form(StatesGroup):
     author = State()
     keywords = State()
     pages = State()
+    method = State()
     payment = State()
 
 
@@ -157,17 +161,87 @@ async def step_pages(message: Message, state: FSMContext) -> None:
     pages = int(raw)
     total = pages * config.PRICE_PER_PAGE
     await state.update_data(pages=pages, total=total)
-    await state.set_state(Form.payment)
+
+    methods = []
+    if config.method_payme_enabled():
+        methods.append("payme")
+    if config.method_click_enabled():
+        methods.append("click")
+    if config.method_card_enabled():
+        methods.append("card")
+
+    # Bitta usul bo'lsa — to'g'ridan-to'g'ri shu usulni boshlaymiz
+    if len(methods) == 1:
+        await _start_method(message, state, lang, methods[0], message.from_user.id)
+        return
+
+    btn_key = {"payme": "btn_payme", "click": "btn_click", "card": "btn_card"}
+    keyboard = [
+        [InlineKeyboardButton(text=t(lang, btn_key[m]), callback_data=f"pay:{m}")]
+        for m in methods
+    ]
+    await state.set_state(Form.method)
     await message.answer(
-        t(
-            lang,
-            "payment_info",
-            pages=pages,
-            total=fmt_sum(total),
-            card=config.PAYMENT_CARD_NUMBER,
-            holder=config.PAYMENT_CARD_HOLDER or "—",
-        )
+        t(lang, "choose_method", pages=pages, total=fmt_sum(total)),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
     )
+
+
+@dp.callback_query(Form.method, F.data.startswith("pay:"))
+async def on_method(callback: CallbackQuery, state: FSMContext) -> None:
+    method = callback.data.split(":", 1)[1]
+    lang = get_lang(callback.from_user.id)
+    await callback.answer()
+    if callback.message:
+        await _start_method(callback.message, state, lang, method, callback.from_user.id)
+
+
+async def _start_method(
+    target: Message, state: FSMContext, lang: str, method: str, user_id: int
+) -> None:
+    data = await state.get_data()
+    pages = int(data.get("pages", 1))
+    total = int(data.get("total", pages * config.PRICE_PER_PAGE))
+
+    # Karta + chek usuli — eski oqim
+    if method == "card":
+        await state.set_state(Form.payment)
+        await target.answer(
+            t(
+                lang,
+                "payment_info",
+                pages=pages,
+                total=fmt_sum(total),
+                card=config.PAYMENT_CARD_NUMBER,
+                holder=config.PAYMENT_CARD_HOLDER or "—",
+            )
+        )
+        return
+
+    # Online to'lov (Payme / Click) — buyurtma yaratiladi, havola yuboriladi
+    order_id = await store.create_order(
+        {
+            "user_id": user_id,
+            "chat_id": target.chat.id,
+            "lang": lang,
+            "topic": data.get("topic", ""),
+            "field": data.get("field", ""),
+            "author": data.get("author", ""),
+            "keywords": data.get("keywords", ""),
+            "pages": pages,
+            "amount": total,
+        }
+    )
+    if method == "payme":
+        url = payments.payme_link(order_id, total)
+    else:
+        url = payments.click_link(order_id, total)
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text=t(lang, "btn_pay"), url=url)]]
+    )
+    await target.answer(t(lang, "online_pay_msg"), reply_markup=kb)
+    await state.clear()
 
 
 @dp.message(Form.payment, F.photo)
@@ -265,12 +339,24 @@ def _safe_filename(title: str) -> str:
 
 
 async def main() -> None:
+    store.init_db()
     bot = Bot(
         token=config.TELEGRAM_BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+
+    # Click/Payme webhook'lari uchun veb-server (bot bilan bir loopda)
+    runner = web.AppRunner(payments.create_web_app(bot))
+    await runner.setup()
+    site = web.TCPSite(runner, config.WEB_HOST, config.WEB_PORT)
+    await site.start()
+    logger.info("Webhook server: %s:%s", config.WEB_HOST, config.WEB_PORT)
+
     logger.info("Bot ishga tushdi.")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await runner.cleanup()
 
 
 if __name__ == "__main__":
