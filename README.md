@@ -30,8 +30,16 @@ assets/app.js       — ilova mantig'i
 assets/journals.js  — jurnallar ma'lumotlar bazasi (namuna)
 ```
 
-## Eslatma
+## Jurnallar ma'lumotlari
 
-Jurnallar ro'yxati — **namuna** ma'lumotlar. Rasmiy va to'liq ro'yxat uchun
+Ilovadagi 48 ta jurnal — **Scopus / Web of Science** bazalarida indekslangan
+haqiqiy xalqaro jurnallar (turli sohalar bo'yicha, to'g'ri ISSN bilan).
+
+OAK xorijiy jurnallarning yopiq ro'yxatini yuritmaydi: Nizomga ko'ra, xorijiy
+nashr **Scopus**, **Web of Science**, Springer, PubMed, Index Copernicus kabi
+bazalarda indekslangan bo'lsa, dissertatsiya talabiga javob beradi. Shu sababli
+ushbu jurnallar OAK tomonidan qabul qilinadi.
+
+To'liq rasmiy ro'yxat (milliy va MDH jurnallari bilan birga) uchun
 [oak.uz](https://oak.uz) saytiga murojaat qiling. Yangi jurnal qo'shish uchun
-`assets/journals.js` faylidagi `JOURNALS` massiviga yangi yozuv qo'shing.
+`assets/journals.js` faylidagi `JOURNALS` massiviga yozuv qo'shing.
