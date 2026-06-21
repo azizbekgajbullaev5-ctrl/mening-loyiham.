@@ -91,6 +91,9 @@ kabinetida quyidagi URL larni ko'rsating:
    python bot.py
    ```
 
+> 🚀 **Serverга 24/7 joylashtirish** (VPS + domen + SSL + Click/Payme webhook):
+> [DEPLOY.md](DEPLOY.md) — noldan to'liq yo'riqnoma.
+
 ## 💬 Buyruqlar
 
 | Buyruq    | Vazifasi                          |
