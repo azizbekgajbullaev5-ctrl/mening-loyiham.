@@ -33,17 +33,22 @@ if [ -f .env ]; then
 fi
 
 if [ -z "$SKIP_ENV" ]; then
-  echo
-  echo "--- Sozlamalarni kiriting (har birini yozib Enter bosing) ---"
-  echo
-
-  read -rp "1) Telegram bot tokeni (@BotFather'dan): " BOT_TOKEN
-  read -rp "2) Anthropic API kaliti (console.anthropic.com): " API_KEY
-  read -rp "3) Karta raqami (mijoz pul o'tkazadi, mas. 8600 1234 5678 9012): " CARD_NUM
-  read -rp "4) Karta egasi ismi (mas. AZIZBEK G.): " CARD_HOLDER
-  read -rp "5) Bir bet narxi so'mda (Enter = 5000): " PRICE
+  # Agar qiymatlar muhit o'zgaruvchilari orqali berilgan bo'lsa —
+  # savol bermasdan to'g'ridan-to'g'ri ishlatamiz (telefon uchun qulay).
+  if [ -n "$BOT_TOKEN" ] && [ -n "$API_KEY" ] && [ -n "$CARD_NUM" ]; then
+    echo "➡️  Sozlamalar buyruq ichidan olindi (savolsiz)."
+  else
+    echo
+    echo "--- Sozlamalarni kiriting (har birini yozib Enter bosing) ---"
+    echo
+    read -rp "1) Telegram bot tokeni (@BotFather'dan): " BOT_TOKEN
+    read -rp "2) Anthropic API kaliti (console.anthropic.com): " API_KEY
+    read -rp "3) Karta raqami (mijoz pul o'tkazadi, mas. 8600 1234 5678 9012): " CARD_NUM
+    read -rp "4) Karta egasi ismi (mas. AZIZBEK G.): " CARD_HOLDER
+    read -rp "5) Bir bet narxi so'mda (Enter = 5000): " PRICE
+    read -rp "6) Admin Telegram ID (ixtiyoriy, bilmasangiz Enter): " ADMIN_ID
+  fi
   PRICE="${PRICE:-5000}"
-  read -rp "6) Admin Telegram ID (ixtiyoriy, @userinfobot'dan; bilmasangiz Enter): " ADMIN_ID
 
   cat > .env <<EOF
 TELEGRAM_BOT_TOKEN=$BOT_TOKEN
