@@ -7,8 +7,10 @@
 // bo'lsa, OAK talabiga javob beradi. Quyidagilar — Scopus/WoS'da
 // indekslangan, OAK qabul qiladigan haqiqiy xalqaro jurnallar (turli sohalar).
 // To'liq rasmiy ro'yxat uchun: https://oak.uz
+//
+// Har bir jurnalda "tur" maydoni bor: "Xalqaro" yoki "Mahalliy".
 
-const JOURNALS = [
+const XALQARO = [
   // ===== KO'P SOHALI / TABIIY FANLAR =====
   { id: 1, nomi: "Nature", nashriyot: "Springer Nature", soha: "Ko'p sohali (tabiiy fanlar)", til: "Ingliz", davlat: "Buyuk Britaniya", issn: "0028-0836", indeks: ["Scopus", "Web of Science"], kvartil: "Q1", davriylik: "Haftalik", web: "https://www.nature.com",
     tavsif: "Dunyodagi eng nufuzli ko'p sohali ilmiy jurnallardan biri; yuqori ta'sirli tabiiy fanlar tadqiqotlari.",
@@ -175,6 +177,68 @@ const JOURNALS = [
     tavsif: "Huquq, korporativ boshqaruv va huquqiy tartibga solish jurnali.",
     talablar: "Huquqiy va qiyosiy tahlil, amaliy xulosalar." },
 ];
+
+// ===== MAHALLIY JURNALLAR (O'zbekiston — OAK milliy ro'yxati) =====
+// Eslatma: ba'zi milliy jurnallarning ISSN'i tasdiqlanmaganligi sababli "—"
+// bilan belgilangan. Aniq ISSN'ni jurnal saytidan tekshiring.
+const MAHALLIY = [
+  { id: 101, nomi: "O'zbek tili va adabiyoti", nashriyot: "O'zR FA", soha: "Filologiya", til: "O'zbek", davlat: "O'zbekiston", issn: "—", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik", web: "https://oak.uz",
+    tavsif: "O'zbek tilshunosligi va adabiyotshunosligi bo'yicha milliy ilmiy jurnal.",
+    talablar: "O'zbek yoki rus tilida, UDK indeksi bilan; original filologik tadqiqot." },
+  { id: 102, nomi: "O'zbekiston tarixi", nashriyot: "O'zR FA Tarix instituti", soha: "Tarix", til: "O'zbek", davlat: "O'zbekiston", issn: "2010-9156", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Choraklik", web: "https://oak.uz",
+    tavsif: "O'zbekiston tarixi, manbashunoslik va tarixshunoslik bo'yicha milliy jurnal.",
+    talablar: "Arxiv manbalariga asoslangan tarixiy tadqiqot." },
+  { id: 103, nomi: "Uzbek Mathematical Journal (O'zbek matematika jurnali)", nashriyot: "V.I.Romanovskiy nomidagi Matematika instituti", soha: "Matematika", til: "Ingliz / Rus", davlat: "O'zbekiston", issn: "2010-7269", indeks: ["OAK (milliy)", "zbMATH"], kvartil: "—", davriylik: "Choraklik", web: "https://mathjournal.uz",
+    tavsif: "Sof va amaliy matematika bo'yicha O'zbekiston milliy jurnali.",
+    talablar: "Original teorema/isbot yoki amaliy model; LaTeX." },
+  { id: 104, nomi: "O'zR FA ma'ruzalari (Doklady Akademii nauk RUz)", nashriyot: "O'zR FA", soha: "Ko'p sohali", til: "Rus / O'zbek", davlat: "O'zbekiston", issn: "—", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik", web: "https://oak.uz",
+    tavsif: "Fanlar akademiyasining barcha yo'nalishlar bo'yicha ma'ruzalar jurnali.",
+    talablar: "Akademik tomonidan taqdim etiladigan qisqa ilmiy ma'ruza." },
+  { id: 105, nomi: "O'zbekiston kimyo jurnali (Uzbek Chemical Journal)", nashriyot: "O'zR FA", soha: "Kimyo", til: "Rus / O'zbek", davlat: "O'zbekiston", issn: "0042-1626", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik", web: "https://chemjournal.uz",
+    tavsif: "Kimyo va kimyoviy texnologiya bo'yicha O'zbekiston milliy jurnali.",
+    talablar: "Original kimyoviy tadqiqot, eksperimental qism." },
+  { id: 106, nomi: "O'zbek fizika jurnali (Uzbek Journal of Physics)", nashriyot: "O'zR FA", soha: "Fizika", til: "Rus / Ingliz", davlat: "O'zbekiston", issn: "—", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik", web: "https://oak.uz",
+    tavsif: "Nazariy va eksperimental fizika bo'yicha milliy jurnal.",
+    talablar: "Fizika sohasida original natijalar." },
+  { id: 107, nomi: "O'zbekiston biologiya jurnali", nashriyot: "O'zR FA", soha: "Biologiya", til: "Rus / O'zbek", davlat: "O'zbekiston", issn: "—", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik", web: "https://oak.uz",
+    tavsif: "Botanika, zoologiya va biologiyaning boshqa yo'nalishlari jurnali.",
+    talablar: "Biologik dala yoki laboratoriya tadqiqoti." },
+  { id: 108, nomi: "O'zbekiston tibbiyot jurnali", nashriyot: "Sog'liqni saqlash vazirligi", soha: "Tibbiyot", til: "O'zbek / Rus", davlat: "O'zbekiston", issn: "—", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik", web: "https://oak.uz",
+    tavsif: "Klinik va nazariy tibbiyot bo'yicha milliy ilmiy jurnal.",
+    talablar: "Etik komissiya tasdig'i, IMRAD tuzilishi." },
+  { id: 109, nomi: "Agro ilm (O'zbekiston qishloq xo'jaligi)", nashriyot: "Qishloq xo'jaligi vazirligi", soha: "Qishloq xo'jaligi", til: "O'zbek", davlat: "O'zbekiston", issn: "—", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik", web: "https://oak.uz",
+    tavsif: "Agronomiya, chorvachilik va qishloq xo'jaligi iqtisodiyoti jurnali.",
+    talablar: "Dala tajribalari va amaliy tavsiyalar." },
+  { id: 110, nomi: "Geologiya va mineral resurslar", nashriyot: "Davlat geologiya qo'mitasi", soha: "Geologiya", til: "Rus / O'zbek", davlat: "O'zbekiston", issn: "—", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik", web: "https://oak.uz",
+    tavsif: "Geologiya, foydali qazilmalar va mineral resurslar jurnali.",
+    talablar: "Dala-geologik tadqiqot natijalari." },
+  { id: 111, nomi: "Yuridik fanlar axborotnomasi (Review of Law Sciences)", nashriyot: "TDYU", soha: "Huquqshunoslik", til: "O'zbek / Ingliz", davlat: "O'zbekiston", issn: "2181-919X", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Choraklik", web: "https://review.tsul.uz",
+    tavsif: "Toshkent davlat yuridik universitetining huquqshunoslik jurnali.",
+    talablar: "Huquqiy tahlil, qiyosiy huquqshunoslik." },
+  { id: 112, nomi: "Iqtisodiyot va innovatsion texnologiyalar", nashriyot: "TDIU", soha: "Iqtisodiyot", til: "O'zbek / Rus", davlat: "O'zbekiston", issn: "2181-9491", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik (online)", web: "https://iqtisodiyot.tsue.uz",
+    tavsif: "Toshkent davlat iqtisodiyot universitetining elektron ilmiy jurnali.",
+    talablar: "Empirik iqtisodiy tahlil va innovatsion yondashuv." },
+  { id: 113, nomi: "Iqtisod va moliya (Экономика и финансы)", nashriyot: "Moliya vazirligi", soha: "Iqtisodiyot / Moliya", til: "O'zbek / Rus", davlat: "O'zbekiston", issn: "2181-9009", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Oylik", web: "https://oak.uz",
+    tavsif: "Moliya, bank ishi va iqtisodiyot bo'yicha milliy jurnal.",
+    talablar: "Moliyaviy-iqtisodiy tahlil, statistik ma'lumotlar." },
+  { id: 114, nomi: "Zamonaviy ta'lim (Современное образование)", nashriyot: "Xalq ta'limi vazirligi", soha: "Pedagogika", til: "O'zbek / Rus", davlat: "O'zbekiston", issn: "2181-6395", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Oylik", web: "https://oak.uz",
+    tavsif: "Ta'lim metodikasi va pedagogik innovatsiyalar bo'yicha jurnal.",
+    talablar: "Ta'lim amaliyoti uchun ahamiyatli tadqiqot." },
+  { id: 115, nomi: "Pedagogik mahorat", nashriyot: "Buxoro davlat universiteti", soha: "Pedagogika", til: "O'zbek", davlat: "O'zbekiston", issn: "2181-6883", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Ikki oylik", web: "https://oak.uz",
+    tavsif: "Pedagogika va psixologiya yo'nalishidagi ilmiy-nazariy jurnal.",
+    talablar: "Pedagogik tadqiqot metodologiyasi." },
+  { id: 116, nomi: "O'zMU xabarlari (Acta NUUz)", nashriyot: "O'zbekiston Milliy universiteti", soha: "Ko'p sohali", til: "O'zbek / Rus / Ingliz", davlat: "O'zbekiston", issn: "2181-7324", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Choraklik", web: "https://oak.uz",
+    tavsif: "O'zbekiston Milliy universitetining ko'p sohali ilmiy axborotnomasi.",
+    talablar: "Tabiiy yoki gumanitar fanlar bo'yicha original maqola." },
+  { id: 117, nomi: "Arxitektura. Qurilish. Dizayn", nashriyot: "TArxQDI", soha: "Arxitektura / Qurilish", til: "O'zbek / Rus", davlat: "O'zbekiston", issn: "—", indeks: ["OAK (milliy)"], kvartil: "—", davriylik: "Choraklik", web: "https://oak.uz",
+    tavsif: "Arxitektura, shaharsozlik va qurilish bo'yicha milliy jurnal.",
+    talablar: "Loyihaviy yoki ilmiy-texnik tadqiqot." },
+];
+
+XALQARO.forEach((j) => (j.tur = "Xalqaro"));
+MAHALLIY.forEach((j) => (j.tur = "Mahalliy"));
+
+const JOURNALS = [...MAHALLIY, ...XALQARO];
 
 const SOHALAR = [...new Set(JOURNALS.map((j) => j.soha))].sort();
 const TILLAR = [...new Set(JOURNALS.map((j) => j.til))].sort();

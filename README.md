@@ -5,10 +5,10 @@ maqola tayyorlash va yuborish uchun veb-ilova.
 
 ## Imkoniyatlar
 
-- 📚 **Jurnallar ro'yxati va qidiruv** — soha, til va davlat bo'yicha filtrlash
-- 📖 **Jurnal tafsilotlari** — ISSN, indekslanish (Scopus/Web of Science), kvartil, talablar
+- 📚 **Jurnallar ro'yxati va qidiruv** — 🇺🇿 Mahalliy / 🌍 Xalqaro turlarga ajratilgan, soha va til bo'yicha filtr
+- 📖 **Jurnal tafsilotlari** — ISSN, indekslanish (Scopus/Web of Science/OAK milliy), kvartil, talablar
 - 📝 **Maqola talablari va shabloni** — IMRAD tuzilishi va yuklab olinadigan shablon
-- ✉️ **Maqola yuborish formasi** — ma'lumotlar brauzerda (localStorage) saqlanadi
+- ✉️ **Maqola yuborish formasi** — jurnallar tur bo'yicha guruhlangan; ma'lumotlar brauzerda (localStorage) saqlanadi
 
 ## Ishga tushirish
 
@@ -32,8 +32,13 @@ assets/journals.js  — jurnallar ma'lumotlar bazasi (namuna)
 
 ## Jurnallar ma'lumotlari
 
-Ilovadagi 48 ta jurnal — **Scopus / Web of Science** bazalarida indekslangan
-haqiqiy xalqaro jurnallar (turli sohalar bo'yicha, to'g'ri ISSN bilan).
+Ilovada **65 ta jurnal** ikki turga ajratilgan:
+
+- **🌍 Xalqaro (48 ta)** — Scopus / Web of Science bazalarida indekslangan
+  haqiqiy jurnallar (to'g'ri ISSN bilan).
+- **🇺🇿 Mahalliy (17 ta)** — O'zbekiston OAK milliy ro'yxatidagi jurnallar.
+  Ba'zi milliy jurnallarning ISSN'i "—" bilan belgilangan (jurnal saytidan
+  tekshiring).
 
 OAK xorijiy jurnallarning yopiq ro'yxatini yuritmaydi: Nizomga ko'ra, xorijiy
 nashr **Scopus**, **Web of Science**, Springer, PubMed, Index Copernicus kabi

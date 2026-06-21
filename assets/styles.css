@@ -157,6 +157,47 @@ body {
   flex: 0 1 200px;
 }
 
+.tur-toggle {
+  display: inline-flex;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.tur-btn {
+  border: none;
+  background: transparent;
+  padding: 8px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--muted);
+  transition: all 0.18s;
+}
+
+.tur-btn:hover {
+  color: var(--primary);
+}
+
+.tur-btn.active {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.tag.tur-xalqaro {
+  background: #eaf3ff;
+  color: #1a5fb4;
+}
+
+.tag.tur-mahalliy {
+  background: #fdf0e3;
+  color: #b5651d;
+}
+
 .info-banner {
   background: #eef4fc;
   border: 1px solid #cfe0f6;

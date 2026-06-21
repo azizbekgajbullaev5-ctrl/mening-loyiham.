@@ -1,8 +1,10 @@
 // ====== Ilova mantig'i ======
 const STORAGE_KEY = "oak_arizalar";
+let joriyTur = ""; // "", "Xalqaro" yoki "Mahalliy"
 
 document.addEventListener("DOMContentLoaded", () => {
   initNav();
+  initTurToggle();
   initFiltrlar();
   initModal();
   renderJurnallar();
@@ -10,6 +12,18 @@ document.addEventListener("DOMContentLoaded", () => {
   initForm();
   renderArizalar();
 });
+
+// ---------- Tur (Mahalliy / Xalqaro) ----------
+function initTurToggle() {
+  const tugmalar = document.querySelectorAll(".tur-btn");
+  tugmalar.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      joriyTur = btn.dataset.tur;
+      tugmalar.forEach((b) => b.classList.toggle("active", b === btn));
+      renderJurnallar();
+    });
+  });
+}
 
 // ---------- Navigatsiya ----------
 function initNav() {
@@ -34,7 +48,19 @@ function initFiltrlar() {
 
   SOHALAR.forEach((s) => sohaSelect.add(new Option(s, s)));
   TILLAR.forEach((t) => tilSelect.add(new Option(t, t)));
-  JOURNALS.forEach((j) => formJurnal.add(new Option(j.nomi, j.nomi)));
+
+  // Forma select'ini tur bo'yicha guruhlash (optgroup)
+  [
+    ["🇺🇿 Mahalliy jurnallar", "Mahalliy"],
+    ["🌍 Xalqaro jurnallar", "Xalqaro"],
+  ].forEach(([label, tur]) => {
+    const group = document.createElement("optgroup");
+    group.label = label;
+    JOURNALS.filter((j) => j.tur === tur).forEach((j) =>
+      group.appendChild(new Option(j.nomi, j.nomi))
+    );
+    formJurnal.appendChild(group);
+  });
 
   document.getElementById("qidiruv").addEventListener("input", renderJurnallar);
   sohaSelect.addEventListener("change", renderJurnallar);
@@ -55,9 +81,10 @@ function renderJurnallar() {
       j.soha.toLowerCase().includes(qidiruv) ||
       j.davlat.toLowerCase().includes(qidiruv) ||
       j.nashriyot.toLowerCase().includes(qidiruv);
+    const turMos = !joriyTur || j.tur === joriyTur;
     const sohaMos = !soha || j.soha === soha;
     const tilMos = !til || j.til === til;
-    return matnMos && sohaMos && tilMos;
+    return matnMos && turMos && sohaMos && tilMos;
   });
 
   document.getElementById("natija-soni").textContent =
@@ -76,9 +103,12 @@ function renderJurnallar() {
       <h3>${esc(j.nomi)}</h3>
       <p class="nashriyot">${esc(j.nashriyot)} · ${esc(j.davlat)}</p>
       <div class="tags">
+        <span class="tag tur-${j.tur === "Mahalliy" ? "mahalliy" : "xalqaro"}">
+          ${j.tur === "Mahalliy" ? "🇺🇿 Mahalliy" : "🌍 Xalqaro"}
+        </span>
         <span class="tag">${esc(j.soha)}</span>
         <span class="tag">${esc(j.til)} tili</span>
-        <span class="tag kvartil">${esc(j.kvartil)}</span>
+        ${j.kvartil && j.kvartil !== "—" ? `<span class="tag kvartil">${esc(j.kvartil)}</span>` : ""}
       </div>
       <p class="card-tavsif">${esc(j.tavsif.slice(0, 110))}...</p>
       <button class="btn-detail" data-id="${j.id}">Batafsil ko'rish</button>
@@ -110,6 +140,7 @@ function ochModal(id) {
     <p class="nashriyot" style="color:var(--muted);margin-bottom:14px;">
       ${esc(j.nashriyot)}
     </p>
+    <div class="detail-row"><span class="label">Turi</span><span>${j.tur === "Mahalliy" ? "🇺🇿 Mahalliy (OAK milliy)" : "🌍 Xalqaro"}</span></div>
     <div class="detail-row"><span class="label">Soha</span><span>${esc(j.soha)}</span></div>
     <div class="detail-row"><span class="label">Til</span><span>${esc(j.til)}</span></div>
     <div class="detail-row"><span class="label">Davlat</span><span>${esc(j.davlat)}</span></div>
