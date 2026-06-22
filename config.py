@@ -10,9 +10,15 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-8")
 
 # --- Narx sozlamalari ---
-PRICE_PER_PAGE = int(os.getenv("PRICE_PER_PAGE", "5000"))  # bir bet narxi (so'm)
+PRICE_PER_PAGE = int(os.getenv("PRICE_PER_PAGE", "5000"))  # oddiy maqola — bir bet (so'm)
+# Premium (jadval + diagrammali) maqola — bir bet narxi (so'm)
+PRICE_PER_PAGE_PREMIUM = int(os.getenv("PRICE_PER_PAGE_PREMIUM", "8000"))
 MIN_PAGES = int(os.getenv("MIN_PAGES", "1"))
 MAX_PAGES = int(os.getenv("MAX_PAGES", "15"))
+
+
+def price_per_page(premium: bool) -> int:
+    return PRICE_PER_PAGE_PREMIUM if premium else PRICE_PER_PAGE
 
 # --- Karta + chek (qo'lbola) usuli ---
 PAYMENT_CARD_NUMBER = os.getenv("PAYMENT_CARD_NUMBER", "")

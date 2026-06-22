@@ -1,28 +1,24 @@
-# 🗺 Keyingi rejalar (ROADMAP)
+# 🗺 Rejalar (ROADMAP)
 
-## Premium maqola: jadval + diagramma (5 kundan keyin)
+## ✅ Premium maqola: jadval + diagramma (bajarildi)
 
-Mijozlar ko'paygach qo'shiladigan funksiya.
+Mijoz to'lov oldidan maqola turini tanlaydi:
+- 📄 **Oddiy maqola** — `PRICE_PER_PAGE` (standart 5000 so'm/bet)
+- 📊 **Premium (jadval + diagramma)** — `PRICE_PER_PAGE_PREMIUM` (standart 8000 so'm/bet)
 
-### Nima qo'shiladi
-- 📋 **Jadvallar** — Word va PDF ichida (oson, ishonchli)
-- 📈 **Diagrammalar** — ustunli/doira/chiziqli grafiklar (matplotlib bilan rasm)
-- 🔲 **Sxemalar** — keyinroq, ehtiyojga qarab (murakkabroq)
-
-### Narx modeli: PREMIUM VARIANT
-Mijoz to'lov oldidan tanlaydi:
-- 📄 **Oddiy maqola** — hozirgi narx (mas. 5000 so'm/bet)
-- 📊 **Jadval/diagrammali (Premium)** — qimmatroq (mas. 8000–10000 so'm/bet)
-
-### Texnik eslatma (ishlab chiqishda)
-- `article_generator.py` — Claude'dan jadval/grafik ma'lumotlarini ham
-  strukturada qaytaradigan qilish (prompt + JSON sxema kengaytiriladi)
-- `docx_builder.py` — python-docx jadval + rasm qo'shish
-- `pdf_builder.py` — fpdf2 jadval + rasm qo'shish
-- Yangi: `chart_builder.py` — matplotlib bilan grafik rasm chizadi
-- Serverga `matplotlib` o'rnatiladi (requirements.txt ga qo'shiladi)
-- `bot.py` — to'lov oldidan "Oddiy / Premium" tanlovi (FSM bosqichi),
+### Nima qo'shildi
+- 📋 **Jadvallar** — Word va PDF ichida (`docx_builder.py`, `pdf_builder.py`)
+- 📈 **Diagrammalar** — ustunli (bar) / doira (pie) / chiziqli (line) grafiklar
+  (`chart_builder.py`, matplotlib bilan PNG)
+- 🔢 Jadval va diagramma ma'lumotlari Claude'dan strukturada (JSON) keladi
+  (`article_generator.py` — premium sxema + prompt kengaytmasi)
+- 💳 `bot.py` — to'lov oldidan "Oddiy / Premium" tanlovi (FSM `kind` bosqichi),
   narx tanlovga qarab hisoblanadi
-- `config.py` — `PRICE_PER_PAGE_PREMIUM` qo'shiladi
+- 🗄 `store.py` — buyurtmalarga `premium` ustuni (eski baza uchun migratsiya)
 
-> Holat: rejalashtirilgan. Boshlash uchun "premium funksiyani qilamiz" deng.
+### Eslatma
+- Jadval va diagrammalardagi barcha matn maqolaning **asosiy tilida** (bitta tilda).
+- Serverga `matplotlib` kerak (`requirements.txt` ga qo'shilgan).
+
+## Keyingi g'oyalar
+- 🔲 **Sxemalar** (blok-sxema/oqim diagrammasi) — ehtiyojga qarab.

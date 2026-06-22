@@ -5,7 +5,9 @@ import io
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt
+from docx.shared import Inches, Pt
+
+from chart_builder import render_chart
 
 _LABELS = {
     "annotation": {"uz": "Annotatsiya", "ru": "Аннотация", "en": "Abstract"},
@@ -14,6 +16,8 @@ _LABELS = {
         "ru": "Ключевые слова",
         "en": "Keywords",
     },
+    "table": {"uz": "jadval", "ru": "таблица"},
+    "figure": {"uz": "rasm", "ru": "рисунок"},
 }
 
 _SECTION_TITLES = {
@@ -43,6 +47,54 @@ def _add_body(doc: Document, text: str) -> None:
         p = doc.add_paragraph(chunk)
         p.paragraph_format.first_line_indent = Pt(18)
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+
+def _add_tables(doc: Document, tables: list, lang: str) -> None:
+    """Premium jadvallarni qo'shadi (sarlavha + jadval)."""
+    for idx, tbl in enumerate(tables, 1):
+        headers = [str(h) for h in (tbl.get("headers") or [])]
+        rows = tbl.get("rows") or []
+        if not headers and not rows:
+            continue
+
+        cap = doc.add_paragraph()
+        label = _LABELS["table"].get(lang, _LABELS["table"]["uz"])
+        cap.add_run(f"{idx}-{label}. {tbl.get('title', '')}".strip()).bold = True
+
+        ncols = max(len(headers), max((len(r) for r in rows), default=0))
+        if ncols == 0:
+            continue
+        table = doc.add_table(rows=0, cols=ncols)
+        table.style = "Table Grid"
+
+        if headers:
+            hcells = table.add_row().cells
+            for i in range(ncols):
+                text = headers[i] if i < len(headers) else ""
+                hcells[i].text = str(text)
+                for p in hcells[i].paragraphs:
+                    for run in p.runs:
+                        run.bold = True
+        for r in rows:
+            cells = table.add_row().cells
+            for i in range(ncols):
+                cells[i].text = str(r[i]) if i < len(r) else ""
+        doc.add_paragraph()
+
+
+def _add_charts(doc: Document, charts: list, lang: str) -> None:
+    """Premium diagrammalarni (matplotlib rasm) qo'shadi."""
+    for idx, chart in enumerate(charts, 1):
+        png = render_chart(chart)
+        if png is None:
+            continue
+        doc.add_picture(png, width=Inches(5.5))
+        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cap = doc.add_paragraph()
+        cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        label = _LABELS["figure"].get(lang, _LABELS["figure"]["uz"])
+        cap.add_run(f"{idx}-{label}. {chart.get('title', '')}".strip()).italic = True
+        doc.add_paragraph()
 
 
 def build_docx(article: dict, author: str, lang: str) -> io.BytesIO:
@@ -99,6 +151,10 @@ def build_docx(article: dict, author: str, lang: str) -> io.BytesIO:
         heading = doc.add_paragraph()
         heading.add_run(titles[key]).bold = True
         _add_body(doc, article.get(key, ""))
+        # Jadval/diagrammalar natijalardan keyin joylashtiriladi (premium)
+        if key == "results":
+            _add_tables(doc, article.get("tables") or [], lang)
+            _add_charts(doc, article.get("charts") or [], lang)
 
     # Adabiyotlar
     refs = article.get("references") or []

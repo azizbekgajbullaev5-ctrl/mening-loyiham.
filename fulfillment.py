@@ -67,6 +67,7 @@ async def deliver_order(bot: Bot, order_id: str) -> None:
             keywords=order["keywords"],
             lang=lang,
             pages=int(order["pages"]),
+            premium=bool(order.get("premium")),
         )
         article = await generate_article(req)
         docx_stream = build_docx(article, req.author, lang)

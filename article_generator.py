@@ -1,6 +1,7 @@
 """Claude API orqali OAK talablariga mos ilmiy maqola generatsiyasi."""
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 
@@ -81,6 +82,65 @@ ARTICLE_SCHEMA = {
     "additionalProperties": False,
 }
 
+# --- Premium (jadval + diagramma) qo'shimcha sxemasi ---
+# Jadval va diagrammalar maqolaning asosiy tilida (bitta til) bo'ladi.
+_TABLE_SCHEMA = {
+    "type": "array",
+    "description": "Maqola natijalarini ko'rsatadigan jadvallar (asosiy tilda).",
+    "items": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "Jadval sarlavhasi"},
+            "headers": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Ustun nomlari",
+            },
+            "rows": {
+                "type": "array",
+                "items": {"type": "array", "items": {"type": "string"}},
+                "description": "Qatorlar; har biri ustunlar soniga teng",
+            },
+        },
+        "required": ["title", "headers", "rows"],
+        "additionalProperties": False,
+    },
+}
+
+_CHART_SCHEMA = {
+    "type": "array",
+    "description": "Diagrammalar (ustunli/doira/chiziqli) — asosiy tilda.",
+    "items": {
+        "type": "object",
+        "properties": {
+            "type": {"type": "string", "enum": ["bar", "pie", "line"]},
+            "title": {"type": "string", "description": "Diagramma sarlavhasi"},
+            "labels": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Kategoriya nomlari",
+            },
+            "values": {
+                "type": "array",
+                "items": {"type": "number"},
+                "description": "Son qiymatlar; labels bilan teng uzunlikda",
+            },
+            "x_label": {"type": "string", "description": "X o'qi nomi (bar/line)"},
+            "y_label": {"type": "string", "description": "Y o'qi nomi (bar/line)"},
+        },
+        "required": ["type", "title", "labels", "values", "x_label", "y_label"],
+        "additionalProperties": False,
+    },
+}
+
+
+def _premium_schema() -> dict:
+    schema = copy.deepcopy(ARTICLE_SCHEMA)
+    schema["properties"]["tables"] = _TABLE_SCHEMA
+    schema["properties"]["charts"] = _CHART_SCHEMA
+    schema["required"] = schema["required"] + ["tables", "charts"]
+    return schema
+
 
 @dataclass
 class ArticleRequest:
@@ -90,6 +150,7 @@ class ArticleRequest:
     keywords: str
     lang: str  # interfeys/tana tili: "uz" yoki "ru"
     pages: int = 5  # maqola hajmi (bet soni)
+    premium: bool = False  # jadval + diagrammali (premium) variant
 
 
 # Bir A4 bet taxminan shuncha so'z (Times New Roman 14pt) — hajmni shunga moslaymiz
@@ -109,6 +170,21 @@ def _build_prompt(req: ArticleRequest) -> str:
         else "Muallif ko'rsatilmagan."
     )
     target_words = max(1, req.pages) * WORDS_PER_PAGE
+    premium_note = ""
+    if req.premium:
+        premium_note = (
+            "\n\nPREMIUM TALABLARI (jadval + diagramma):\n"
+            "- 'tables': 1–2 ta mazmunli jadval bering (natijalarni aks ettiruvchi). "
+            "Har bir jadvalda sarlavha, ustun nomlari (headers) va qatorlar (rows) "
+            "bo'lsin; har bir qatorda ustunlar soniga teng katak bo'lsin.\n"
+            "- 'charts': 1–2 ta diagramma bering (type: 'bar', 'pie' yoki 'line'). "
+            "labels va values teng uzunlikda, values — faqat sonlar. bar/line uchun "
+            "x_label va y_label ni to'ldiring (pie uchun bo'sh qatordan foydalaning).\n"
+            "- Jadval va diagrammalardagi BARCHA matn (sarlavha, ustun nomlari, "
+            f"belgilar, o'q nomlari) FAQAT {body_lang} bo'lsin (bitta tilda).\n"
+            "- Jadval/diagramma ma'lumotlari maqola matni (ayniqsa Natijalar) bilan "
+            "mos va mantiqan asoslangan bo'lsin."
+        )
     return (
         "Siz O'zbekiston Oliy attestatsiya komissiyasi (OAK/ВАК) talablariga "
         "to'liq mos ilmiy maqola yozadigan tajribali ilmiy muharrirsiz.\n\n"
@@ -135,12 +211,14 @@ def _build_prompt(req: ArticleRequest) -> str:
         "ishonchli va mavzuga mos (mualliflar, sarlavha, nashr, yil, sahifa).\n"
         "- Matn ilmiy, ravon va plagiatsiz, mantiqiy izchil bo'lsin.\n"
         "- Paragraflar orasida bo'sh qatordan foydalaning."
+        f"{premium_note}"
     )
 
 
 async def generate_article(req: ArticleRequest) -> dict:
     """Maqolani generatsiya qiladi va bo'limlar dict'ini qaytaradi."""
     prompt = _build_prompt(req)
+    schema = _premium_schema() if req.premium else ARTICLE_SCHEMA
 
     # Hajmga qarab max_tokens ni moslaymiz (kirill matn so'ziga ~2.5 token).
     max_tokens = min(48000, 6000 + max(1, req.pages) * WORDS_PER_PAGE * 3)
@@ -151,7 +229,7 @@ async def generate_article(req: ArticleRequest) -> dict:
         thinking={"type": "adaptive"},
         output_config={
             "effort": "high",
-            "format": {"type": "json_schema", "schema": ARTICLE_SCHEMA},
+            "format": {"type": "json_schema", "schema": schema},
         },
         messages=[{"role": "user", "content": prompt}],
     ) as stream:

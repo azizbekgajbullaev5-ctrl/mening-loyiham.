@@ -46,6 +46,7 @@ class Form(StatesGroup):
     author = State()
     keywords = State()
     pages = State()
+    kind = State()
     method = State()
     payment = State()
 
@@ -92,7 +93,14 @@ async def on_language(callback: CallbackQuery, state: FSMContext) -> None:
 @dp.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     lang = get_lang(message.from_user.id)
-    await message.answer(t(lang, "help", price=fmt_sum(config.PRICE_PER_PAGE)))
+    await message.answer(
+        t(
+            lang,
+            "help",
+            price=fmt_sum(config.PRICE_PER_PAGE),
+            price_premium=fmt_sum(config.PRICE_PER_PAGE_PREMIUM),
+        )
+    )
 
 
 @dp.message(Command("id"))
@@ -188,13 +196,7 @@ async def step_keywords(message: Message, state: FSMContext) -> None:
     await state.update_data(keywords=message.text or "")
     await state.set_state(Form.pages)
     await message.answer(
-        t(
-            lang,
-            "ask_pages",
-            min=config.MIN_PAGES,
-            max=config.MAX_PAGES,
-            price=fmt_sum(config.PRICE_PER_PAGE),
-        )
+        t(lang, "ask_pages", min=config.MIN_PAGES, max=config.MAX_PAGES)
     )
 
 
@@ -209,8 +211,56 @@ async def step_pages(message: Message, state: FSMContext) -> None:
         return
 
     pages = int(raw)
-    total = pages * config.PRICE_PER_PAGE
-    await state.update_data(pages=pages, total=total)
+    await state.update_data(pages=pages)
+
+    # Maqola turini tanlash: Oddiy yoki Premium (jadval + diagramma)
+    await state.set_state(Form.kind)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=t(lang, "btn_kind_standard"), callback_data="kind:standard"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=t(lang, "btn_kind_premium"), callback_data="kind:premium"
+                )
+            ],
+        ]
+    )
+    await message.answer(
+        t(
+            lang,
+            "choose_kind",
+            pages=pages,
+            std=fmt_sum(pages * config.PRICE_PER_PAGE),
+            prem=fmt_sum(pages * config.PRICE_PER_PAGE_PREMIUM),
+        ),
+        reply_markup=kb,
+    )
+
+
+@dp.callback_query(Form.kind, F.data.startswith("kind:"))
+async def on_kind(callback: CallbackQuery, state: FSMContext) -> None:
+    premium = callback.data.split(":", 1)[1] == "premium"
+    lang = get_lang(callback.from_user.id)
+    data = await state.get_data()
+    pages = int(data.get("pages", 1))
+    total = pages * config.price_per_page(premium)
+    await state.update_data(premium=premium, total=total)
+    await callback.answer()
+    if callback.message:
+        await _offer_payment(callback.message, state, lang, callback.from_user.id)
+
+
+async def _offer_payment(
+    target: Message, state: FSMContext, lang: str, user_id: int
+) -> None:
+    """To'lov usulini taklif qiladi (yoki bitta usul bo'lsa to'g'ridan boshlaydi)."""
+    data = await state.get_data()
+    pages = int(data.get("pages", 1))
+    total = int(data.get("total", pages * config.PRICE_PER_PAGE))
 
     methods = []
     if config.method_payme_enabled():
@@ -222,7 +272,7 @@ async def step_pages(message: Message, state: FSMContext) -> None:
 
     # Bitta usul bo'lsa — to'g'ridan-to'g'ri shu usulni boshlaymiz
     if len(methods) == 1:
-        await _start_method(message, state, lang, methods[0], message.from_user.id)
+        await _start_method(target, state, lang, methods[0], user_id)
         return
 
     btn_key = {"payme": "btn_payme", "click": "btn_click", "card": "btn_card"}
@@ -231,7 +281,7 @@ async def step_pages(message: Message, state: FSMContext) -> None:
         for m in methods
     ]
     await state.set_state(Form.method)
-    await message.answer(
+    await target.answer(
         t(lang, "choose_method", pages=pages, total=fmt_sum(total)),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
     )
@@ -280,6 +330,7 @@ async def _start_method(
             "keywords": data.get("keywords", ""),
             "pages": pages,
             "amount": total,
+            "premium": bool(data.get("premium")),
         }
     )
     if method == "payme":
@@ -319,6 +370,7 @@ async def on_receipt(message: Message, state: FSMContext) -> None:
             "keywords": data.get("keywords", ""),
             "pages": pages,
             "amount": total,
+            "premium": bool(data.get("premium")),
         }
     )
 

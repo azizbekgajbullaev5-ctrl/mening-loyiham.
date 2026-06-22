@@ -6,6 +6,9 @@ import os
 
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
+from fpdf.fonts import FontFace
+
+from chart_builder import render_chart
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
 _FONT_REGULAR = os.getenv(
@@ -18,6 +21,8 @@ _FONT_BOLD = os.getenv(
 _LABELS = {
     "annotation": {"uz": "Annotatsiya", "ru": "Аннотация", "en": "Abstract"},
     "keywords": {"uz": "Kalit so'zlar", "ru": "Ключевые слова", "en": "Keywords"},
+    "table": {"uz": "jadval", "ru": "таблица"},
+    "figure": {"uz": "rasm", "ru": "рисунок"},
 }
 
 _SECTION_TITLES = {
@@ -67,6 +72,53 @@ def _body(pdf: _PDF, text: str) -> None:
         pdf.ln(2)
 
 
+def _add_tables(pdf: _PDF, tables: list, lang: str) -> None:
+    """Premium jadvallarni chizadi."""
+    for idx, tbl in enumerate(tables, 1):
+        headers = [str(h) for h in (tbl.get("headers") or [])]
+        rows = tbl.get("rows") or []
+        if not headers and not rows:
+            continue
+        label = _LABELS["table"].get(lang, _LABELS["table"]["uz"])
+        _cell(pdf, f"{idx}-{label}. {tbl.get('title', '')}".strip(), 12, bold=True)
+
+        ncols = max(len(headers), max((len(r) for r in rows), default=0))
+        if ncols == 0:
+            continue
+        data = []
+        if headers:
+            data.append([headers[i] if i < len(headers) else "" for i in range(ncols)])
+        for r in rows:
+            data.append([str(r[i]) if i < len(r) else "" for i in range(ncols)])
+
+        pdf.set_font("DejaVu", "", 10)
+        with pdf.table(
+            first_row_as_headings=bool(headers),
+            headings_style=FontFace(emphasis="BOLD"),
+        ) as table:
+            for data_row in data:
+                row = table.row()
+                for datum in data_row:
+                    row.cell(datum)
+        pdf.ln(3)
+
+
+def _add_charts(pdf: _PDF, charts: list, lang: str) -> None:
+    """Premium diagrammalarni (matplotlib rasm) chizadi."""
+    for idx, chart in enumerate(charts, 1):
+        png = render_chart(chart)
+        if png is None:
+            continue
+        # Sahifa kengligiga moslab markazga joylashtiramiz
+        epw = pdf.epw  # samarali sahifa kengligi (mm)
+        width = min(150, epw)
+        x = pdf.l_margin + (epw - width) / 2
+        pdf.image(png, x=x, w=width)
+        label = _LABELS["figure"].get(lang, _LABELS["figure"]["uz"])
+        _cell(pdf, f"{idx}-{label}. {chart.get('title', '')}".strip(), 11, align="C")
+        pdf.ln(3)
+
+
 def build_pdf(article: dict, author: str, lang: str) -> io.BytesIO:
     """Maqoladan .pdf tuzib, BytesIO oqimini qaytaradi."""
     lang = lang if lang in _SECTION_TITLES else "uz"
@@ -100,6 +152,10 @@ def build_pdf(article: dict, author: str, lang: str) -> io.BytesIO:
     for key in ("introduction", "main_part", "results", "conclusion"):
         _cell(pdf, titles[key], 13, bold=True)
         _body(pdf, article.get(key, ""))
+        # Jadval/diagrammalar natijalardan keyin (premium)
+        if key == "results":
+            _add_tables(pdf, article.get("tables") or [], lang)
+            _add_charts(pdf, article.get("charts") or [], lang)
 
     # Adabiyotlar
     refs = article.get("references") or []

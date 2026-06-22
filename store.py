@@ -39,6 +39,7 @@ def _init() -> None:
                 keywords    TEXT,
                 pages       INTEGER,
                 amount      INTEGER,        -- so'mda
+                premium     INTEGER DEFAULT 0,  -- 1 = jadval+diagrammali (premium)
                 status      TEXT,
                 created_at  INTEGER,
                 paid_at     INTEGER,
@@ -47,6 +48,10 @@ def _init() -> None:
             )
             """
         )
+        # Eski bazalar uchun migratsiya — 'premium' ustuni bo'lmasa qo'shamiz
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(orders)")}
+        if "premium" not in cols:
+            conn.execute("ALTER TABLE orders ADD COLUMN premium INTEGER DEFAULT 0")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS payme_tx (
@@ -74,8 +79,8 @@ def _create_order(data: dict[str, Any]) -> str:
         conn.execute(
             """INSERT INTO orders
                (order_id, user_id, chat_id, lang, topic, field, author,
-                keywords, pages, amount, status, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                keywords, pages, amount, premium, status, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 order_id,
                 data["user_id"],
@@ -87,6 +92,7 @@ def _create_order(data: dict[str, Any]) -> str:
                 data["keywords"],
                 data["pages"],
                 data["amount"],
+                1 if data.get("premium") else 0,
                 CREATED,
                 int(time.time()),
             ),

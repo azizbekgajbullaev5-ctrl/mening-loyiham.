@@ -12,9 +12,13 @@ Interfeys ikki tilda: 🇺🇿 o'zbekcha va 🇷🇺 ruscha.
   (uz/ru/en), kirish, asosiy qism, natijalar, xulosa, foydalanilgan adabiyotlar.
 - Universal — har qanday ilmiy soha uchun.
 - Tayyor maqola **Word (.docx)** va **PDF** hujjatlarida (OAK uslubi).
+- 📊 **Premium maqola**: mijoz tanlasa, maqolaga **jadval va diagrammalar**
+  (ustunli/doira/chiziqli) qo'shiladi (matn asosiy tilda). Narxi alohida —
+  `PRICE_PER_PAGE_PREMIUM` (standart **8 000 so'm/bet**).
 - Til tanlash (o'zbekcha / ruscha).
-- 💳 **To'lov tizimi**: mijoz maqola hajmini (1–15 bet) tanlaydi, har bet
-  uchun belgilangan narx (standart **5 000 so'm**) hisoblanadi. Uch xil to'lov:
+- 💳 **To'lov tizimi**: mijoz maqola hajmini (1–15 bet) va turini (oddiy/premium)
+  tanlaydi, har bet uchun belgilangan narx (oddiy standart **5 000 so'm**)
+  hisoblanadi. Uch xil to'lov:
   **Payme**, **Click** (rasmiy Merchant API, webhook orqali avtomatik) yoki
   **karta + chek**. To'lovdan keyin maqola avtomatik tayyorlanadi.
 
@@ -31,8 +35,10 @@ Bot uchta to'lov usulini qo'llab-quvvatlaydi (mijoz tanlaydi). Har bir usul
 
 ### Umumiy jarayon
 
-1. Mijoz mavzu, soha, muallif, kalit so'zlar va **bet sonini (1–15)** kiritadi.
-2. Bot summani hisoblaydi (`bet × narx`) va **to'lov usulini** so'raydi.
+1. Mijoz mavzu, soha, muallif, kalit so'zlar va **bet sonini (1–15)** kiritadi,
+   so'ng maqola turini tanlaydi: **Oddiy** yoki **Premium (jadval+diagramma)**.
+2. Bot summani hisoblaydi (`bet × narx`, tanlangan turga qarab) va **to'lov
+   usulini** so'raydi.
 3. Payme/Click — to'lov tugmasi yuboriladi; to'lovdan keyin webhook orqali
    maqola avtomatik tayyorlanadi. Karta — chek rasmini yuborgach tayyorlanadi.
 
@@ -76,7 +82,8 @@ kabinetida quyidagi URL larni ko'rsating:
    - `ANTHROPIC_API_KEY` — [console.anthropic.com](https://console.anthropic.com) dan oling.
    - `CLAUDE_MODEL` — ixtiyoriy (standart: `claude-opus-4-8`).
    - `PAYMENT_CARD_NUMBER`, `PAYMENT_CARD_HOLDER` — to'lov qabul qiladigan kartangiz.
-   - `PRICE_PER_PAGE` — bir bet narxi (standart `5000`).
+   - `PRICE_PER_PAGE` — oddiy maqola bir bet narxi (standart `5000`).
+   - `PRICE_PER_PAGE_PREMIUM` — premium (jadval+diagramma) bir bet narxi (standart `8000`).
    - `MIN_PAGES`, `MAX_PAGES` — bet chegaralari (standart `1`–`15`).
    - `ADMIN_CHAT_ID` — cheklar yuboriladigan Telegram ID ingiz (ixtiyoriy,
      [@userinfobot](https://t.me/userinfobot) orqali bilib oling).
