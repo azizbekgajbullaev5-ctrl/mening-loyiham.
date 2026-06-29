@@ -166,6 +166,17 @@ async def cmd_new(message: Message, state: FSMContext) -> None:
     await message.answer(t(lang, "ask_topic"))
 
 
+@dp.callback_query(F.data == "new_order")
+async def on_new_order(callback: CallbackQuery, state: FSMContext) -> None:
+    """Maqola yetkazilgandan keyingi 'Yangi maqola' tugmasi — yangi buyurtma."""
+    lang = get_lang(callback.from_user.id)
+    await callback.answer()
+    await state.clear()
+    await state.set_state(Form.topic)
+    if callback.message:
+        await callback.message.answer(t(lang, "ask_topic"))
+
+
 @dp.message(Form.topic)
 async def step_topic(message: Message, state: FSMContext) -> None:
     lang = get_lang(message.from_user.id)

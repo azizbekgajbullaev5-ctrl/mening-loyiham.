@@ -26,6 +26,14 @@ PAYMENT_CARD_HOLDER = os.getenv("PAYMENT_CARD_HOLDER", "")
 _admin = os.getenv("ADMIN_CHAT_ID", "").strip()
 ADMIN_CHAT_ID = int(_admin) if _admin.lstrip("-").isdigit() else None
 
+# Egasi (admin) Telegram username — shikoyat/taklif tugmasi shunga bog'lanadi
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").lstrip("@").strip()
+
+
+def feedback_url() -> str:
+    """Shikoyat/taklif uchun egasi bilan bog'lanish havolasi (yoki bo'sh)."""
+    return f"https://t.me/{ADMIN_USERNAME}" if ADMIN_USERNAME else ""
+
 # --- Veb-server (Click/Payme webhook'lari uchun) ---
 WEB_HOST = os.getenv("WEB_HOST", "0.0.0.0")
 WEB_PORT = int(os.getenv("WEB_PORT", "8080"))

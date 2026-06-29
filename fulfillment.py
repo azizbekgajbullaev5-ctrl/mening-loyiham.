@@ -5,8 +5,13 @@ import html
 import logging
 
 from aiogram import Bot
-from aiogram.types import BufferedInputFile
+from aiogram.types import (
+    BufferedInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 
+import config
 import store
 from article_generator import ArticleRequest, generate_article
 from docx_builder import build_docx
@@ -89,6 +94,19 @@ async def deliver_order(bot: Bot, order_id: str) -> None:
             chat_id,
             BufferedInputFile(pdf_stream.read(), filename=fname + ".pdf"),
             caption=t(lang, "pdf_caption"),
+        )
+
+        # Yakuniy xabar: "Yangi maqola" va "Shikoyat / Taklif" tugmalari
+        rows = [
+            [InlineKeyboardButton(text=t(lang, "btn_new_article"), callback_data="new_order")]
+        ]
+        fb = config.feedback_url()
+        if fb:
+            rows.append([InlineKeyboardButton(text=t(lang, "btn_feedback"), url=fb)])
+        await bot.send_message(
+            chat_id,
+            t(lang, "after_delivery"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
         await store.set_status(order_id, store.DELIVERED, delivered=True)
     except Exception as err:  # noqa: BLE001
