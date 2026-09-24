@@ -61,7 +61,7 @@ T: dict[str, dict[str, str]] = {
         "kind.introduction": "Kirish", "kind.literature_review": "Adabiyotlar tahlili", "kind.methodology": "Metodologiya",
         "kind.results": "Natijalar", "kind.discussion": "Muhokama", "kind.conclusion": "Xulosa",
         "kind.references": "Foydalanilgan adabiyotlar", "kind.appendix": "Ilovalar", "kind.chapter": "Bob",
-        "kind.section": "Bo'lim", "kind.subsection": "Kichik bo'lim", "kind.heading": "Sarlavha", "kind.front_matter": "Boshlang'ich qism",
+        "kind.section": "Bo'lim", "kind.subsection": "Kichik bo'lim", "kind.heading": "Sarlavha", "kind.front_matter": "Boshlang'ich qism", "kind.body": "Asosiy matn",
         # similarity scope
         "scope.local_only": "Faqat lokal/hujjat ichidagi o'xshashlik tahlili. Tashqi provayder ulanmagan — internet bo'yicha tekshiruv o'tkazilmagan.",
         "scope.local_and_external": "Lokal tahlil + tashqi o'xshashlik provayderi.",
@@ -140,7 +140,7 @@ T: dict[str, dict[str, str]] = {
         "kind.introduction": "Introduction", "kind.literature_review": "Literature review", "kind.methodology": "Methodology",
         "kind.results": "Results", "kind.discussion": "Discussion", "kind.conclusion": "Conclusion",
         "kind.references": "References", "kind.appendix": "Appendices", "kind.chapter": "Chapter", "kind.section": "Section",
-        "kind.subsection": "Subsection", "kind.heading": "Heading", "kind.front_matter": "Front matter",
+        "kind.subsection": "Subsection", "kind.heading": "Heading", "kind.front_matter": "Front matter", "kind.body": "Main text",
         "scope.local_only": "Local/document similarity analysis only. No external provider connected — no internet-wide check was performed.",
         "scope.local_and_external": "Local analysis + external similarity provider.",
         "scope.local_only_external_failed": "Local analysis only: the external provider returned an error.",

@@ -214,3 +214,13 @@ def test_long_paragraph_is_split_by_sentences():
     ps = segment(blocks, sections)
     assert len(ps) >= 3 and all(p.word_count <= MAX_PASSAGE_WORDS for p in ps)
     assert all(p.paragraph_start == 1 for p in ps)
+
+
+def test_long_text_after_title_is_body_not_title_page():
+    """Regression: a single styled title followed by the whole text must not exclude the text."""
+    blocks = [Block(0, "RAQAMLI TA'LIM ASOSLARI", kind="heading", heading_level=1, page=1)] + [
+        Block(i, "Matn paragrafi. " * 20, page=1) for i in range(1, 30)
+    ]
+    sections = build_sections(detect_headings(blocks, "uz"), len(blocks))
+    assert [(s.kind, s.start, s.end) for s in sections] == [("title", 0, 1), ("body", 1, 30)]
+    assert not sections[1].excluded_from_ai

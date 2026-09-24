@@ -39,6 +39,7 @@ const statusCls: Record<string, string> = {
   running: "bg-brand-50 text-brand-700",
   completed: "bg-emerald-50 text-emerald-800",
   failed: "bg-red-50 text-red-700",
+  awaiting_confirmation: "bg-amber-50 text-amber-800",
 };
 
 export function StatusBadge({ status, progress, queue }: { status: string; progress?: number; queue?: number | null }) {

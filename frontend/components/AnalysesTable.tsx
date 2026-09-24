@@ -27,6 +27,7 @@ export function AnalysesTable({ items, onChanged }: { items: AnalysisSummary[]; 
                   <th className="th">{t.table.document}</th>
                   <th className="th">{t.table.language}</th>
                   <th className="th text-right">{t.table.words}</th>
+                  <th className="th text-right">{t.table.originality}</th>
                   <th className="th text-right">{t.table.ai}</th>
                   <th className="th text-right">{t.table.similarity}</th>
                   <th className="th">{t.table.status}</th>
@@ -43,6 +44,7 @@ export function AnalysesTable({ items, onChanged }: { items: AnalysisSummary[]; 
                     </td>
                     <td className="td">{a.language ? t.languages[a.language] ?? a.language : "—"}</td>
                     <td className="td text-right tabular-nums">{num(a.word_count)}</td>
+                    <td className="td text-right tabular-nums font-medium">{pct(a.originality, 1)}</td>
                     <td className="td text-right">
                       <span className="tabular-nums">{pct(a.ai_likelihood)}</span>
                       {a.ai_confidence && <div className="mt-0.5"><ConfidenceBadge value={a.ai_confidence} /></div>}
@@ -68,8 +70,8 @@ export function AnalysesTable({ items, onChanged }: { items: AnalysisSummary[]; 
                   <StatusBadge status={a.status} progress={a.progress} queue={a.queue_position} />
                 </div>
                 <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                  <div><dt className="text-slate-400">{t.table.originality}</dt><dd className="font-semibold">{pct(a.originality, 1)}</dd></div>
                   <div><dt className="text-slate-400">{t.table.ai}</dt><dd className="font-semibold">{pct(a.ai_likelihood)}</dd></div>
-                  <div><dt className="text-slate-400">{t.table.similarity}</dt><dd className="font-semibold">{pct(a.similarity_overall)}</dd></div>
                   <div><dt className="text-slate-400">{t.table.words}</dt><dd>{num(a.word_count)}</dd></div>
                 </dl>
                 <button onClick={() => remove(a.document_id)} className="mt-2 text-xs text-red-600">{t.table.delete}</button>

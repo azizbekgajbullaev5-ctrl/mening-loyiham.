@@ -16,7 +16,8 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from app.analyzers.text_utils import normalize, stable_hash64, words_lower
+from app.analyzers.text_utils import normalize, stable_hash64
+from app.plagiarism.textnorm import canonical_words
 
 SHINGLE = 6
 WINNOW_WINDOW = 4
@@ -59,7 +60,8 @@ class SimilarityOutcome:
 
 
 def _tokens(text: str) -> list[str]:
-    return words_lower(normalize(text))
+    # canonical form (Cyrillic->Latin, homoglyphs fixed): same hashes as the plagiarism module
+    return canonical_words(text)
 
 
 def shingles(tokens: list[str], stop: frozenset[str], k: int = SHINGLE) -> list[tuple[int, int]]:

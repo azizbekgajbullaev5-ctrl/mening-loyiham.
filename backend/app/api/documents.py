@@ -19,6 +19,8 @@ from app.document_processing.validation import ValidationError, validate_upload
 from app.models import Analysis, Document, DocumentFingerprint, DocumentVersion, User
 from app.services import checkpoints, storage
 from app.services.audit import audit
+from app.plagiarism import web as webcheck
+from app.plagiarism.textnorm import display_text
 from app.services.pipeline import prepare
 from app.tasks.queue import enqueue_analysis
 
@@ -48,6 +50,8 @@ async def upload(
     depth: Depth = Form("standard"),
     doc_type: str = Form("article"),
     keep_for_similarity: bool = Form(True),
+    corpus_check: bool = Form(True),
+    web_check: bool = Form(False),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -78,12 +82,18 @@ async def upload(
         version = DocumentVersion(document_id=doc.id, version_no=1)
         db.add(version)
         db.flush()
-        analysis = Analysis(document_id=doc.id, version_id=version.id, owner_id=user.id, depth=depth)
+        analysis = Analysis(document_id=doc.id, version_id=version.id, owner_id=user.id, depth=depth,
+                            corpus_check=corpus_check, web_check=web_check)
+        if web_check:
+            # internet check costs money: show the estimate and wait for the user's confirmation
+            analysis.status, analysis.stage = "awaiting_confirmation", "awaiting_confirmation"
+            analysis.web_estimate = webcheck.estimate(webcheck.quick_word_count(v.file_type, data))
         db.add(analysis)
         db.flush()
         audit(db, "document_uploaded", user.id, "document", doc.id, client_ip(request), size=len(data), type=v.file_type)
         created.append((doc, analysis))
-        to_run.append(analysis.id)
+        if not web_check:
+            to_run.append(analysis.id)
     db.commit()
     for aid in to_run:
         enqueue_analysis(aid)
@@ -159,7 +169,7 @@ def document_content(document_id: str, user: User = Depends(get_current_user), d
         "language": prep.language,
         "paragraphs": [
             {
-                "index": b.index, "number": b.index + 1, "text": b.text, "kind": b.kind, "page": b.page,
+                "index": b.index, "number": b.index + 1, "text": display_text(b.text), "kind": b.kind, "page": b.page,
                 "heading": {"kind": heading_at[b.index].kind, "level": heading_at[b.index].level} if b.index in heading_at else None,
             }
             for b in blocks

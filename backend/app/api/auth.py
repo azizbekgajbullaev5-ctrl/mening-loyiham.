@@ -27,7 +27,8 @@ class LoginIn(BaseModel):
 
 
 def _user_out(u: User) -> dict:
-    return {"id": u.id, "email": u.email, "full_name": u.full_name, "created_at": u.created_at}
+    return {"id": u.id, "email": u.email, "full_name": u.full_name, "created_at": u.created_at,
+            "is_admin": bool(u.is_admin or u.email in get_settings().admin_emails)}
 
 
 def _set_cookie(resp: Response, token: str) -> None:
@@ -45,7 +46,9 @@ def register(body: RegisterIn, request: Request, response: Response, db: Session
         raise HTTPException(422, "weak_password")
     if db.scalar(select(func.count()).select_from(User).where(User.email == email)):
         raise HTTPException(409, "email_taken")
-    user = User(email=email, full_name=body.full_name.strip(), password_hash=hash_password(body.password))
+    first = not db.scalar(select(func.count()).select_from(User))
+    user = User(email=email, full_name=body.full_name.strip(), password_hash=hash_password(body.password),
+                is_admin=first or email in get_settings().admin_emails)
     db.add(user)
     db.flush()
     audit(db, "register", user.id, "user", user.id, client_ip(request))

@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    LargeBinary,
     Boolean,
     DateTime,
     Float,
@@ -43,6 +44,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(200), default="")
     password_hash: Mapped[str] = mapped_column(String(255))
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
@@ -119,6 +121,10 @@ class Analysis(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # plagiarism options; web_check needs the user's confirmation of the cost estimate
+    corpus_check: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    web_check: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    web_estimate: Mapped[dict] = mapped_column(JSON, default=dict)
 
     document: Mapped[Document] = relationship(back_populates="analyses")
     version: Mapped[DocumentVersion | None] = relationship()
@@ -135,6 +141,9 @@ class Analysis(Base):
         back_populates="analysis", cascade="all, delete-orphan"
     )
     reports: Mapped[list[Report]] = relationship(back_populates="analysis", cascade="all, delete-orphan")
+    plagiarism: Mapped[PlagiarismResult | None] = relationship(
+        back_populates="analysis", cascade="all, delete-orphan", uselist=False
+    )
 
 
 class AnalysisResult(Base):
@@ -294,3 +303,133 @@ class AuditLog(Base):
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+# ---------------------------------------------------------------- plagiarism
+class PlagiarismResult(Base):
+    """Antiplagiat-style result: originality / borrowing / citation and sources.
+
+    ``spans`` holds only positions ([block, start, end, source_idx, class]) so the
+    viewer/report can colour the text re-extracted from the encrypted file.
+    """
+
+    __tablename__ = "plagiarism_results"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    analysis_id: Mapped[str] = mapped_column(ForeignKey("analyses.id", ondelete="CASCADE"), unique=True)
+    checked_words: Mapped[int] = mapped_column(Integer, default=0)
+    excluded_words: Mapped[int] = mapped_column(Integer, default=0)
+    originality: Mapped[float] = mapped_column(Float, default=100.0)
+    borrowing: Mapped[float] = mapped_column(Float, default=0.0)
+    citation: Mapped[float] = mapped_column(Float, default=0.0)
+    paraphrase_share: Mapped[float] = mapped_column(Float, default=0.0)
+    sources: Mapped[list] = mapped_column(JSON, default=list)
+    spans: Mapped[list] = mapped_column(JSON, default=list)
+    integrity: Mapped[dict] = mapped_column(JSON, default=dict)
+    modules: Mapped[dict] = mapped_column(JSON, default=dict)  # which modules ran + stats (web queries, cost…)
+    exclusions: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    analysis: Mapped[Analysis] = relationship(back_populates="plagiarism")
+
+
+class RefDocument(Base):
+    """Reference-corpus document. Only metadata, fingerprints and vectors are kept — never text."""
+
+    __tablename__ = "ref_documents"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    title: Mapped[str] = mapped_column(String(500))
+    authors: Mapped[str] = mapped_column(String(500), default="")
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    doc_kind: Mapped[str] = mapped_column(String(30), default="other")  # textbook|article|dissertation|autoreferat|other
+    source_type: Mapped[str] = mapped_column(String(20), default="upload")  # upload|ojs|openalex|core|crossref|cyberleninka
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    doi: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
+    language: Mapped[str] = mapped_column(String(10), default="unknown")
+    folder: Mapped[str] = mapped_column(String(300), default="")
+    filename: Mapped[str] = mapped_column(String(300), default="")
+    word_count: Mapped[int] = mapped_column(Integer, default=0)
+    content_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    fingerprint_count: Mapped[int] = mapped_column(Integer, default=0)
+    vector_count: Mapped[int] = mapped_column(Integer, default=0)
+    vector_backend: Mapped[str] = mapped_column(String(120), default="")
+    centroid: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    fulltext: Mapped[bool] = mapped_column(Boolean, default=True)
+    added_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class RefFingerprint(Base):
+    __tablename__ = "ref_fingerprints"
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    ref_doc_id: Mapped[str] = mapped_column(ForeignKey("ref_documents.id", ondelete="CASCADE"), index=True)
+    hash: Mapped[int] = mapped_column(BigInteger, index=True)
+    pos: Mapped[int] = mapped_column(Integer)
+
+
+class RefVector(Base):
+    __tablename__ = "ref_vectors"
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    ref_doc_id: Mapped[str] = mapped_column(ForeignKey("ref_documents.id", ondelete="CASCADE"), index=True)
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    token_start: Mapped[int] = mapped_column(Integer)
+    vector: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class CorpusJob(Base):
+    """Background ingestion (uploaded files) or harvesting (open sources) job."""
+
+    __tablename__ = "corpus_jobs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    kind: Mapped[str] = mapped_column(String(12))  # ingest | harvest
+    status: Mapped[str] = mapped_column(String(12), default="queued")
+    created_by: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    done: Mapped[int] = mapped_column(Integer, default=0)
+    added: Mapped[int] = mapped_column(Integer, default=0)
+    skipped: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+    message: Mapped[str] = mapped_column(String(300), default="")
+    log: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    items: Mapped[list[CorpusJobItem]] = relationship(back_populates="job", cascade="all, delete-orphan")
+
+
+class CorpusJobItem(Base):
+    """One uploaded file waiting to be ingested (encrypted temp file, deleted after)."""
+
+    __tablename__ = "corpus_job_items"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    job_id: Mapped[str] = mapped_column(ForeignKey("corpus_jobs.id", ondelete="CASCADE"), index=True)
+    filename: Mapped[str] = mapped_column(String(300))
+    folder: Mapped[str] = mapped_column(String(300), default="")
+    file_type: Mapped[str] = mapped_column(String(10))
+    storage_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(12), default="queued")  # queued|added|skipped|failed
+    ref_doc_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+    job: Mapped[CorpusJob] = relationship(back_populates="items")
+
+
+class WebPageCache(Base):
+    """Fingerprints of web pages fetched during internet checks (no page text)."""
+
+    __tablename__ = "web_page_cache"
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    url_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    url: Mapped[str] = mapped_column(String(1000))
+    title: Mapped[str] = mapped_column(String(500), default="")
+    status: Mapped[str] = mapped_column(String(20), default="ok")
+    word_count: Mapped[int] = mapped_column(Integer, default=0)
+    hashes: Mapped[bytes] = mapped_column(LargeBinary, default=b"")  # int64 array of all shingle hashes
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

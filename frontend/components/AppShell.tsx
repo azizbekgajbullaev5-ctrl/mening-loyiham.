@@ -29,6 +29,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {user && (
               <>
                 <Link href="/" className="text-slate-600 hover:text-brand-700">{t.nav.dashboard}</Link>
+                <Link href="/corpus/" className="text-slate-600 hover:text-brand-700">{t.corpus.nav}</Link>
                 <span className="hidden text-slate-400 md:inline">{user.email}</span>
                 <button onClick={logout} className="btn-secondary px-3 py-1.5">{t.nav.logout}</button>
               </>

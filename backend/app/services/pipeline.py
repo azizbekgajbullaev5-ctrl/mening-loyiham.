@@ -17,7 +17,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+import numpy as np
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.analyzers import ai_likelihood as ai
@@ -39,6 +40,8 @@ from app.models import (
     DocumentFingerprint,
     DocumentVersion,
     PassageAnalysis,
+    PlagiarismResult,
+    RefDocument,
     SectionResult,
     SimilarityMatch,
 )
@@ -129,7 +132,7 @@ def prepare(
         headings = [Heading(h["paragraph_index"], h["kind"], int(h["level"]), h["title"], h.get("number")) for h in manual_structure]
     else:
         headings = detect_headings(doc.blocks, language)
-    sections = build_sections(headings, len(doc.blocks))
+    sections = build_sections(headings, len(doc.blocks), doc.blocks)
     return Prepared(doc, language, lconf, dist, headings, sections)
 
 
@@ -355,6 +358,10 @@ def _run(db: Session, analysis_id: str, progress: Progress) -> None:
     elif a.depth != "deep" and configured_sim:
         sim_scope = "local_only_external_not_requested"
 
+    # ---- plagiarism (reference corpus, own documents, internet, paraphrase)
+    progress(80, "plagiarism", "", force=True)
+    _plagiarism(db, a, doc, prep, profile, progress)
+
     # ---- style
     progress(86, "style", "", force=True)
     section_texts = {sec.order: " ".join(b.text for b in blocks[sec.start + 1 : sec.end] if b.kind != "table") for sec in sections}
@@ -381,6 +388,42 @@ def _run(db: Session, analysis_id: str, progress: Progress) -> None:
              providers_used, comparison, style, academic, sec_metrics, profile)
     if doc.keep_for_similarity:
         _store_fingerprints(db, doc, sim_passages, profile.stopwords)
+    db.commit()
+
+
+def _plagiarism(db: Session, a: Analysis, doc: Document, prep: Prepared, profile, progress) -> None:
+    from app.plagiarism import integrity, matcher
+    from app.plagiarism import web as webcheck
+
+    step = lambda msg: progress(82, "plagiarism", msg)  # noqa: E731
+    web_sources, web_stats = None, None
+    if a.web_check:
+        # first pass (no paraphrase) tells which sentences are already found locally: those are not searched online
+        pre, stream = matcher.compare(db, prep.doc.blocks, prep.sections, doc, a.corpus_check, None, step, run_paraphrase=False)
+        covered = np.zeros(len(stream.canon), dtype=bool)
+        by_block: dict[int, list[tuple[int, int]]] = defaultdict(list)
+        for i, (b, s0) in enumerate(zip(stream.block, stream.start)):
+            by_block[b].append((s0, i))
+        for blk, st, en, _src, _cls in pre.spans:
+            for s0, i in by_block.get(blk, ()):
+                if st <= s0 < en:
+                    covered[i] = True
+        planned = int((a.web_estimate or {}).get("queries") or webcheck.planned_queries(len(stream.canon)))
+        web_sources, web_stats = webcheck.run(db, stream, covered, planned, progress=lambda m: progress(84, "web", m),
+                                              abbreviations=profile.abbreviations)
+    outcome, _ = matcher.compare(db, prep.doc.blocks, prep.sections, doc, a.corpus_check, web_sources, step)
+    modules = dict(outcome.modules)
+    modules["corpus_documents"] = db.scalar(select(func.count()).select_from(RefDocument)) if a.corpus_check else 0
+    if web_stats is not None:
+        modules["web"] = True  # the check ran, even if it found nothing or failed (errors are listed)
+        modules["web_stats"] = web_stats
+    db.execute(delete(PlagiarismResult).where(PlagiarismResult.analysis_id == a.id))
+    db.add(PlagiarismResult(
+        analysis_id=a.id, checked_words=outcome.checked_words, excluded_words=outcome.excluded_words,
+        originality=outcome.originality, borrowing=outcome.borrowing, citation=outcome.citation,
+        paraphrase_share=outcome.paraphrase_share, sources=outcome.sources, spans=outcome.spans[:200000],
+        integrity=integrity.scan(prep.doc), modules=modules, exclusions=outcome.exclusions,
+    ))
     db.commit()
 
 

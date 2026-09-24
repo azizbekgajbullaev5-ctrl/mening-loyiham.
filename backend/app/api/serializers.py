@@ -59,6 +59,10 @@ def analysis_summary(a: Analysis) -> dict:
         "language": v.language if v else None, "word_count": v.word_count if v else None, "page_count": v.page_count if v else None,
         "ai_likelihood": r.ai_likelihood if r else None, "ai_confidence": r.ai_confidence if r else None,
         "similarity_overall": r.similarity_overall if r else None,
+        "corpus_check": a.corpus_check, "web_check": a.web_check, "web_estimate": a.web_estimate or None,
+        "originality": a.plagiarism.originality if a.plagiarism else None,
+        "borrowing": a.plagiarism.borrowing if a.plagiarism else None,
+        "citation": a.plagiarism.citation if a.plagiarism else None,
     }
 
 
@@ -138,4 +142,40 @@ def match_out(m: SimilarityMatch, sections: dict[int, SectionResult], lang: str 
         "matched_paragraph_number": m.matched_paragraph_index + 1 if m.matched_paragraph_index is not None else None,
         "matched_document_id": m.matched_document_id, "matched_document_name": m.matched_document_name,
         "source_title": m.source_title, "source_url": m.source_url, "similarity": round(m.similarity * 100, 1),
+    }
+
+
+MODULE_LABELS = {
+    "uz": {"corpus": "Ma'lumotnoma bazasi", "own": "Sizning hujjatlaringiz", "web": "Internet (Brave)", "paraphrase": "Semantik o'xshashlik"},
+    "en": {"corpus": "Reference corpus", "own": "Your documents", "web": "Internet (Brave)", "paraphrase": "Semantic similarity"},
+}
+INTEGRITY_LABELS = {
+    "uz": {
+        "homoglyphs": "Kirill/lotin harflari aralashtirilgan so'zlar (harf almashtirish)",
+        "invisible_chars": "Ko'rinmas belgilar (zero-width va h.k.)",
+        "hidden_text": "Yashirin, oq yoki juda mayda shriftli matn (tahlildan chiqarildi)",
+        "spaced_letters": "Harflar orasiga bo'sh joy qo'yilgan so'zlar",
+        "unusual_spaces": "G'ayrioddiy bo'shliq belgilari ko'p",
+    },
+    "en": {
+        "homoglyphs": "Words mixing Cyrillic and Latin letters (letter substitution)",
+        "invisible_chars": "Invisible characters (zero-width etc.)",
+        "hidden_text": "Hidden, white or tiny-font text (excluded from the check)",
+        "spaced_letters": "Letters separated by spaces",
+        "unusual_spaces": "Many unusual space characters",
+    },
+}
+
+
+def plagiarism_out(p, lang: str = "uz") -> dict:
+    ml = MODULE_LABELS.get(lang, MODULE_LABELS["uz"])
+    il = INTEGRITY_LABELS.get(lang, INTEGRITY_LABELS["uz"])
+    integ = dict(p.integrity or {})
+    integ["items"] = [dict(i, label=il.get(i["code"], i["code"])) for i in integ.get("items", [])]
+    return {
+        "checked_words": p.checked_words, "excluded_words": p.excluded_words,
+        "originality": p.originality, "borrowing": p.borrowing, "citation": p.citation, "paraphrase_share": p.paraphrase_share,
+        "sources": [dict(src, module_label=ml.get(src["module"], src["module"])) for src in p.sources],
+        "spans": p.spans, "integrity": integ, "modules": p.modules, "exclusions": p.exclusions,
+        "module_labels": ml,
     }

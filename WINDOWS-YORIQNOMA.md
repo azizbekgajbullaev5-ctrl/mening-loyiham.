@@ -123,6 +123,69 @@ Qo'shimcha tashqi baho kerak bo'lsa:
    Har bir hujjatdan faqat eng shubhali 40 ta parcha yuboriladi (butun hujjat emas); natijalar keshlanadi.
    Tashqi baho lokal baho bilan **yonma-yon** ko'rsatiladi, ular birlashtirilmaydi.
 
+## Plagiat tekshiruvi (Antiplagiat uslubida)
+
+### 1. Ma'lumotnoma bazasini to'ldiring (bir marta, keyin vaqti-vaqti bilan)
+Birinchi ro'yxatdan o'tgan foydalanuvchi — **administrator**. Faqat u bazaga hujjat qo'sha oladi.
+
+1. Yuqoridagi menyudan **"Ma'lumotnoma bazasi"** ni oching.
+2. **"Hujjatlarni ommaviy qo'shish"**: hujjat turini tanlang (darslik, maqola, dissertatsiya, avtoreferat…),
+   so'ng **papkani** tanlang — ichidagi barcha DOCX/PDF/TXT fayllar (ichki papkalar bilan) avtomatik yuklanadi.
+3. Pastda jarayon ko'rinadi: nechta qo'shildi, nechta takror, nechta xato. Kompyuterni yopmang.
+4. Bazada **matn saqlanmaydi** — faqat "barmoq izlari" (fingerprint) va vektorlar. Yuklangan fayl indekslangach o'chiriladi.
+5. Sahifa tepasida: hujjatlar soni, so'zlar soni, baza hajmi. Jadvaldan istalgan hujjatni **"O'chirish"** mumkin.
+
+**Ochiq manbalardan yig'ish** (ixtiyoriy, internet kerak): OJS jurnallar (manzilini kiriting), OpenAlex,
+CORE, Crossref, CyberLeninka. Mavzu so'zlarini yozing (masalan: `ta'lim metodikasi, iqtisodiyot`), limitni
+belgilang va **"Yig'ishni boshlash"** ni bosing. Doimiy ro'yxatni `backend\.env` ga yozish mumkin:
+```
+HARVEST_OJS_URLS=https://jurnal1.uz,https://jurnal2.uz
+HARVEST_QUERIES=pedagogika,iqtisodiyot
+OPENALEX_EMAIL=sizning@email.uz
+CROSSREF_MAILTO=sizning@email.uz
+CORE_API_KEY=                  (core.ac.uk dan bepul kalit)
+```
+
+### 2. Hujjatni tekshiring
+1. Bosh sahifada faylni yuklang. **"Ma'lumotnoma bazasi bilan solishtirish"** belgilangan bo'ladi.
+2. Internet bo'yicha ham tekshirmoqchi bo'lsangiz — **"Internet tekshiruvi (Brave Search)"** ni belgilang
+   (faqat Brave kaliti sozlangan bo'lsa yoqiladi, pastga qarang).
+3. Internet tanlansa, tahlil boshlanishidan oldin **nechta so'rov** yuborilishi va **taxminiy narxi** ($)
+   ko'rsatiladi. **"Tasdiqlash va boshlash"** yoki **"Internetsiz tekshirish"** ni bosing.
+4. Natija sahifasida **"Plagiat"** bo'limi:
+   * **Originallik / O'zlashtirish / Iqtiboslar** foizlari (jami 100%);
+   * **Manbalar** ro'yxati va har birining ulushi;
+   * **"Ko'rsatish"** (tekshirilgan matn) — o'zlashtirilgan joylar manba rangida bo'yaladi, `[1]`, `[2]` — manba raqami;
+     kursiv — parafraz (qayta so'zlangan), yashil — iqtibos;
+   * **Texnik hiylalar** — lotin/kirill harf almashtirish, ko'rinmas belgilar, oq/mayda (yashirin) matn
+     alohida ogohlantirish sifatida chiqadi;
+   * **"Antiplagiat hisobot (PDF)"** — Antiplagiat.uz hisobotiga o'xshash tuzilmadagi PDF.
+
+Adabiyotlar ro'yxati, mundarija, titul varag'i, jadvallar va formulalar tekshirilmaydi. Qo'shtirnoq ichidagi
+va manbaga havola (`[3]` yoki `(Karimov, 2020)`) berilgan parcha **iqtibos** hisoblanadi.
+
+### 3. Internet tekshiruvi uchun Brave kaliti (ixtiyoriy, pullik)
+1. https://brave.com/search/api/ da ro'yxatdan o'ting va API kalitini oling.
+2. `backend\.env` fayliga yozing:
+   ```
+   BRAVE_API_KEY=sizning_kalitingiz
+   BRAVE_PRICE_PER_1000_USD=5        (tarifingizdagi 1000 so'rov narxi)
+   WEB_MAX_QUERIES=40                (bitta hujjat uchun eng ko'p so'rov)
+   ```
+3. `start.bat` ni qayta ishga tushiring. Kalit faqat kompyuteringizda qoladi, brauzerga yuborilmaydi.
+   Internetga faqat eng o'ziga xos qisqa jumlalar yuboriladi, butun matn emas.
+
+### 4. Parafraz modeli va 8 GB RAM
+* Birinchi tekshiruvda dastur yengil ko'p tilli modelni (**~0,5 GB**, bir marta) yuklab oladi
+  (`backend\data\models`). Model ishlash vaqtida bir necha yuz MB xotira oladi — 8 GB RAM uchun yetarli.
+* Internet bo'lmasa yoki yuklab bo'lmasa, dastur o'zi **oddiy (hash) usulga** o'tadi: ishlaydi, lekin parafrazni
+  kuchsizroq topadi. Majburan tanlash: `.env` da `EMBEDDING_BACKEND=hash` yoki `EMBEDDING_BACKEND=model2vec`.
+* Usul o'zgartirilsa, bazadagi hujjatlarni qayta yuklash kerak (vektorlar mos kelishi uchun).
+
+**Muhim:** natija faqat tekshirilgan manbalarga nisbatan (sizning bazangiz, oldingi hujjatlaringiz va
+Brave topgan sahifalar). Past o'zlashtirish foizi matn 100% original ekanini isbotlamaydi. Parafraz chegaralari
+taxminiy — belgilangan joylarni o'zingiz ko'rib chiqing.
+
 ## Ma'lumotlar qayerda?
 
 `C:\AkademikTahlil\backend\data\` — ma'lumotlar bazasi (`app.db`), shifrlangan hujjatlar va checkpoint'lar.
@@ -149,5 +212,5 @@ Hujjatni ilovada **"O'chirish"** tugmasi bilan o'chirsangiz, fayl va barcha nati
 ---
 
 **Eslatma:** AI-ehtimollik natijalari ehtimoliy ko'rsatkichlardir va AI mualliflikning qat'iy isboti emas.
-O'xshashlik tahlili va AI-ehtimollik tahlili alohida o'lchovlardir. Tashqi o'xshashlik xizmati ulanmagan bo'lsa,
-internet bo'yicha plagiat tekshiruvi o'tkazilmaydi.
+O'xshashlik tahlili va AI-ehtimollik tahlili alohida o'lchovlardir. Brave kaliti sozlanmagan bo'lsa,
+internet bo'yicha plagiat tekshiruvi o'tkazilmaydi — faqat ma'lumotnoma bazasi va o'z hujjatlaringiz bilan solishtiriladi.
