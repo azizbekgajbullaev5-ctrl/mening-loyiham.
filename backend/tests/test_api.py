@@ -111,11 +111,11 @@ def test_passage_filters(user_client, samples):
     assert all(p["confidence"] == conf for p in user_client.get(f"/api/analyses/{aid}/passages", params={"confidence": conf}).json())
 
 
-def test_multiple_file_upload_with_partial_errors(user_client, samples):
+def test_multiple_file_upload_with_partial_errors(user_client, samples, hostile):
     r = user_client.post(
         "/api/documents",
         files=[("files", ("a.txt", samples["uz.txt"], "text/plain")), ("files", ("b.pdf", samples["ru.pdf"], "application/pdf")),
-               ("files", ("evil.exe", b"MZ", "application/octet-stream"))],
+               ("files", ("evil.exe", hostile["program.exe"].read_bytes(), "application/octet-stream"))],
         data={"depth": "quick", "doc_type": "article"},
     )
     assert r.status_code == 201

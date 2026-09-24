@@ -1,6 +1,4 @@
-import io
 import shutil
-import zipfile
 
 import pytest
 
@@ -84,29 +82,24 @@ def test_validation_accepts_valid_files(samples):
 
 
 @pytest.mark.parametrize(
-    "name,data,code",
+    "upload_name,sample,code",
     [
-        ("x.exe", b"MZ....", "unsupported_type"),
-        ("x.pdf", b"PK\x03\x04 not a pdf", "bad_signature"),
-        ("x.docx", b"%PDF-1.4 fake", "bad_signature"),
-        ("x.txt", b"\x00\x01\x02binary", "bad_signature"),
-        ("x.txt", b"", "empty_file"),
+        ("x.exe", "program.exe", "unsupported_type"),
+        ("x.pdf", "fake.pdf", "bad_signature"),
+        ("x.docx", "fake.docx", "bad_signature"),
+        ("x.txt", "binary.txt", "bad_signature"),
+        ("x.txt", "empty.txt", "empty_file"),
     ],
 )
-def test_validation_rejects_bad_files(name, data, code):
+def test_validation_rejects_bad_files(hostile, upload_name, sample, code):
     with pytest.raises(ValidationError) as e:
-        validate_upload(name, data)
+        validate_upload(upload_name, hostile[sample].read_bytes())
     assert e.value.code == code
 
 
-def test_validation_rejects_macro_docx(samples):
-    buf = io.BytesIO()
-    with zipfile.ZipFile(io.BytesIO(samples["en.docx"])) as src, zipfile.ZipFile(buf, "w") as dst:
-        for item in src.infolist():
-            dst.writestr(item, src.read(item.filename))
-        dst.writestr("word/vbaProject.bin", b"macro")
+def test_validation_rejects_macro_docx(hostile):
     with pytest.raises(ValidationError) as e:
-        validate_upload("m.docx", buf.getvalue())
+        validate_upload("m.docx", hostile["macro.docx"].read_bytes())
     assert e.value.code == "macro_content"
 
 

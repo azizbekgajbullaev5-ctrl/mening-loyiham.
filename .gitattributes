@@ -1,2 +1,15 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Not included in GitHub's "Download ZIP" / release archives (git archive).
+# Ordinary users need only start.bat, run_local.py and backend/ (with the prebuilt web UI in backend/webui).
+# Developers get everything with `git clone`.
+backend/tests/ export-ignore
+backend/pytest.ini export-ignore
+backend/requirements-dev.txt export-ignore
+docker/ export-ignore
+docker-compose.yml export-ignore
+.dockerignore export-ignore
+frontend/ export-ignore
+portal/ export-ignore
+.github/ export-ignore
