@@ -1,0 +1,65 @@
+# Production-like stack: PostgreSQL + Redis + API + RQ worker + Next.js
+#   cp .env.example .env   # fill in SECRET_KEY, FILE_ENCRYPTION_KEY, POSTGRES_PASSWORD
+#   docker compose up -d --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aasa
+      POSTGRES_USER: aasa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aasa -d aasa"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
+    restart: unless-stopped
+
+  backend:
+    build: { context: ., dockerfile: docker/backend.Dockerfile }
+    env_file: .env
+    environment:
+      ENV: production
+      DATABASE_URL: postgresql+psycopg2://aasa:${POSTGRES_PASSWORD}@postgres:5432/aasa
+      REDIS_URL: redis://redis:6379/0
+      TASK_MODE: rq
+    volumes: [uploads:/data/uploads]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    restart: unless-stopped
+    # not published: only the frontend proxy talks to the API
+
+  worker:
+    build: { context: ., dockerfile: docker/backend.Dockerfile }
+    command: ["rq", "worker", "-u", "redis://redis:6379/0", "analysis"]
+    env_file: .env
+    environment:
+      ENV: production
+      DATABASE_URL: postgresql+psycopg2://aasa:${POSTGRES_PASSWORD}@postgres:5432/aasa
+      REDIS_URL: redis://redis:6379/0
+      TASK_MODE: rq
+    volumes: [uploads:/data/uploads]
+    depends_on: [backend]
+    deploy: { replicas: 2 }
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args: { BACKEND_URL: "http://backend:8000" }
+    ports: ["3000:3000"]
+    depends_on: [backend]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:

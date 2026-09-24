@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api import analyses, auth, documents, system
+from app.core.config import get_settings
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    s = get_settings()
+    if s.ENV != "production" and s.DATABASE_URL.startswith("sqlite"):
+        # Development convenience; production uses Alembic migrations.
+        import app.models  # noqa: F401
+        from app.core.database import Base, engine
+
+        Base.metadata.create_all(engine)
+    if s.TASK_MODE == "thread":
+        from app.tasks.maintenance import recover_interrupted
+        from app.tasks.queue import enqueue_analysis
+
+        for aid in recover_interrupted():
+            enqueue_analysis(aid)
+    from app.tasks.maintenance import start_periodic_cleanup
+
+    start_periodic_cleanup()
+    yield
+
+
+def create_app() -> FastAPI:
+    s = get_settings()
+    app = FastAPI(
+        title=s.APP_NAME,
+        version="1.0.0",
+        lifespan=lifespan,
+        docs_url=None if s.ENV == "production" else "/api/docs",
+        openapi_url=None if s.ENV == "production" else "/api/openapi.json",
+        redoc_url=None,
+    )
+    app.add_middleware(
+        CORSMiddleware, allow_origins=s.cors_origins, allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["Content-Type", "Authorization"],
+    )
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Cache-Control", "no-store")
+        return response
+
+    for r in (auth.router, documents.router, analyses.router, system.router):
+        app.include_router(r, prefix=s.API_PREFIX)
+    return app
+
+
+app = create_app()

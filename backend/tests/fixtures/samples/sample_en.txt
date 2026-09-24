@@ -1,0 +1,61 @@
+ORGANISING STUDENTS' INDEPENDENT WORK IN A DIGITAL LEARNING ENVIRONMENT (sample, synthetic text)
+
+ABSTRACT
+
+This sample discusses a 2021–2023 survey of 412 students at three universities in Tashkent and how digital platforms affected the completion of independent coursework.
+
+Keywords: independent study, digital platform, Moodle, assessment.
+
+INTRODUCTION
+
+Independent study accounts for almost 40% of the credit load in the curriculum, yet in practice these hours often go unsupervised. In autumn 2022, only 7 of the 18 groups we observed had assignments marked on time. Elsewhere, lecturers collected everything at once, the week before the final exam. As Karimov [3, p. 45] points out, this turns independent study into a formality. Why does it happen? The first reason is workload: one associate professor supervises 96 students on average. The second was technical, since until 2021 Moodle ran in only two faculties.
+
+The study has limitations. The sample covers only universities in Tashkent, and internet quality in the regions may differ. Groups were also not randomised: lecturers who adopted the platform were probably more active to begin with. Our findings should therefore be generalised with care. The next stage will add two universities in Samarkand and Nukus and use a quasi-experimental design.
+
+CHAPTER I. THEORETICAL FOUNDATIONS OF INDEPENDENT STUDY
+
+1.1. The concept of independent work and its place in the curriculum
+
+Independent study accounts for almost 40% of the credit load in the curriculum, yet in practice these hours often go unsupervised. In autumn 2022, only 7 of the 18 groups we observed had assignments marked on time. Elsewhere, lecturers collected everything at once, the week before the final exam. As Karimov [3, p. 45] points out, this turns independent study into a formality. Why does it happen? The first reason is workload: one associate professor supervises 96 students on average. The second was technical, since until 2021 Moodle ran in only two faculties.
+
+The questionnaire used a five-point Likert scale and was piloted with 36 students. After the pilot we dropped three items because students read them differently. For instance, "ease of using the platform" meant internet speed to some respondents and the interface to others. The final instrument had 24 items. Cronbach's alpha was 0.81, which we took as acceptable internal consistency [7]. Data were processed in SPSS 26, and group differences were tested with the Mann–Whitney U test.
+
+1.2. Capabilities of digital platforms
+
+In today's rapidly evolving world, digital learning technologies have become an integral part of the education system. It is important to note that digital platforms play a crucial role in organising students' independent work. Moreover, they contribute to enhancing the effectiveness of the learning process. Furthermore, digital tools unlock new opportunities for collaboration between teachers and students. Additionally, this approach plays a pivotal role in improving the quality of education. As a result, the modern learning environment becomes more effective, innovative, and dynamic.
+
+Organising independent work in a digital environment requires a holistic approach. Firstly, learning materials should be systematic and comprehensive. Secondly, assessment criteria should be clear and transparent. Thirdly, innovative methods are essential to foster student engagement. Moreover, teachers' digital competence plays a vital role in this process. Ultimately, a comprehensive approach paves the way for a significant improvement in the quality of education.
+
+CHAPTER II. EXPERIMENTAL WORK AND RESULTS
+
+2.1. Research methodology
+
+The questionnaire used a five-point Likert scale and was piloted with 36 students. After the pilot we dropped three items because students read them differently. For instance, "ease of using the platform" meant internet speed to some respondents and the interface to others. The final instrument had 24 items. Cronbach's alpha was 0.81, which we took as acceptable internal consistency [7]. Data were processed in SPSS 26, and group differences were tested with the Mann–Whitney U test.
+
+The results were not quite what we expected. Students who worked on the platform averaged 3.9 points, against 3.7 in traditional groups; the gap is not significant (p = 0.12). On-time submission, however, differed sharply: 78% versus 41%. In other words, the platform changed discipline rather than knowledge. In interviews, students singled out reminders and visible deadlines as the most useful features. One student put it bluntly: "When I can see the deadline, I'm embarrassed to put it off."
+
+2.2. Analysis of results
+
+It is worth noting that digital platforms offer students a wide range of new opportunities. They provide access to learning materials at any time. Furthermore, they foster the development of independent thinking skills. Moreover, digital tools play a key role in personalising the learning experience. Additionally, they are essential for enhancing students' motivation. As a result, the learning process becomes more effective, innovative, and engaging.
+
+Independent study accounts for almost 40% of the credit load in the curriculum, yet in practice these hours often go unsupervised. In autumn 2022, only 7 of the 18 groups we observed had assignments marked on time. Elsewhere, lecturers collected everything at once, the week before the final exam. As Karimov [3, p. 45] points out, this turns independent study into a formality. Why does it happen? The first reason is workload: one associate professor supervises 96 students on average. The second was technical, since until 2021 Moodle ran in only two faculties.
+
+CONCLUSION
+
+In conclusion, organising independent work in a digital environment is a multifaceted and crucial challenge. It is important to note that this process requires a comprehensive approach. Furthermore, digital platforms play a pivotal role in enhancing the quality of education. Moreover, they help to organise students' independent activities seamlessly. Ultimately, this approach paves the way for the sustainable development of the education system.
+
+REFERENCES
+
+1. Abdullayeva N. Independent Study in Higher Education. Tashkent: Fan, 2019. 184 p. (sample)
+
+2. Bekmurodov S. Foundations of Digital Pedagogy. Tashkent, 2020. 212 p. (sample)
+
+3. Karimov A. Monitoring students' independent work. Education and Innovation, 2021, no. 4, pp. 40–47. (sample)
+
+4. Rashidova D. Distance Learning Platforms. Samarkand, 2022. 150 p. (sample)
+
+5. Tursunov B. Assessment Criteria. Tashkent, 2018. (sample)
+
+6. Yusupov O. Building a Course in Moodle. Tashkent, 2021. 96 p. (sample)
+
+7. Cronbach L. Coefficient alpha and the internal structure of tests. Psychometrika, 1951, 16, 297–334.

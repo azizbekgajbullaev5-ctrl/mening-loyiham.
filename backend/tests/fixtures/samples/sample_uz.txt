@@ -1,0 +1,61 @@
+RAQAMLI TA'LIM MUHITIDA TALABALARNING MUSTAQIL ISHINI TASHKIL ETISH (namuna, sintetik matn)
+
+ANNOTATSIYA
+
+Ushbu namunaviy ishda Toshkent shahridagi uchta oliy ta'lim muassasasida 2021–2023 yillarda o'tkazilgan so'rovnoma natijalari asosida talabalarning mustaqil ishini raqamli platformalar yordamida tashkil etish masalasi ko'rib chiqiladi. So'rovnomada 412 nafar talaba ishtirok etdi.
+
+Kalit so'zlar: mustaqil ta'lim, raqamli platforma, Moodle, baholash, talaba faolligi.
+
+KIRISH
+
+Mustaqil ish soatlari o'quv rejasida umumiy yuklamaning qariyb 40 foizini tashkil qiladi, lekin amalda bu soatlar ko'pincha nazoratsiz qoladi. 2022 yil kuzgi semestrda biz kuzatgan 18 ta guruhdan faqat 7 tasida topshiriqlar muddatida tekshirilgan. Qolgan guruhlarda o'qituvchilar topshiriqlarni semestr oxirida, yakuniy nazorat oldidan bir yo'la qabul qilishgan. Bu holat A. Karimovning [3, 45-b.] ta'kidlaganidek, mustaqil ishni rasmiyatchilikka aylantiradi. Nega shunday? Birinchi sabab – o'qituvchi yuklamasi: bitta dotsentga o'rtacha 96 nafar talaba to'g'ri keladi. Ikkinchi sabab texnik edi, chunki Moodle tizimi 2021 yilgacha faqat ikki fakultetda ishlagan.
+
+Tadqiqotning cheklovlari ham bor. Tanlanma faqat Toshkentdagi muassasalarni qamrab oladi, viloyat oliygohlarida internet sifati boshqacha bo'lishi mumkin. Bundan tashqari, guruhlar tasodifiy tanlanmagan: platformani qo'llagan o'qituvchilar, ehtimol, dastlabdan faolroq bo'lgan. Shu sababli natijalarni umumlashtirishda ehtiyot bo'lish kerak. Keyingi bosqichda Samarqand va Nukusdagi ikki universitetni qo'shib, kvazi-eksperimental dizaynni qo'llash rejalashtirilgan.
+
+I BOB. MUSTAQIL TA'LIMNI TASHKIL ETISHNING NAZARIY ASOSLARI
+
+1.1. Mustaqil ish tushunchasi va uning o'quv rejadagi o'rni
+
+Mustaqil ish soatlari o'quv rejasida umumiy yuklamaning qariyb 40 foizini tashkil qiladi, lekin amalda bu soatlar ko'pincha nazoratsiz qoladi. 2022 yil kuzgi semestrda biz kuzatgan 18 ta guruhdan faqat 7 tasida topshiriqlar muddatida tekshirilgan. Qolgan guruhlarda o'qituvchilar topshiriqlarni semestr oxirida, yakuniy nazorat oldidan bir yo'la qabul qilishgan. Bu holat A. Karimovning [3, 45-b.] ta'kidlaganidek, mustaqil ishni rasmiyatchilikka aylantiradi. Nega shunday? Birinchi sabab – o'qituvchi yuklamasi: bitta dotsentga o'rtacha 96 nafar talaba to'g'ri keladi. Ikkinchi sabab texnik edi, chunki Moodle tizimi 2021 yilgacha faqat ikki fakultetda ishlagan.
+
+So'rovnoma savollari R. Laykert shkalasi (1–5) asosida tuzildi va dastlab 36 nafar talabada sinovdan o'tkazildi. Sinovdan keyin uchta savol olib tashlandi: talabalar ularni bir xil tushunmagan edi. Masalan, "platformadan foydalanish qulayligi" iborasini ba'zilar internet tezligi deb, boshqalar esa interfeys deb talqin qilgan. Yakuniy anketa 24 savoldan iborat bo'ldi. Kronbax alfa koeffitsienti 0,81 ga teng chiqdi, bu ichki muvofiqlikni qoniqarli deb hisoblashga imkon beradi [7]. Ma'lumotlar SPSS 26 dasturida qayta ishlandi; guruhlar orasidagi farqlar Manna–Uitni mezoni bilan tekshirildi.
+
+1.2. Raqamli platformalarning imkoniyatlari
+
+Bugungi globallashuv sharoitida raqamli ta'lim texnologiyalari ta'lim tizimining ajralmas qismi hisoblanadi. Shuni ta'kidlash kerakki, raqamli platformalar talabalarning mustaqil ishini tashkil etishda muhim rol o'ynaydi. Shu bilan birga, ular ta'lim jarayonining samaradorligini oshirishga xizmat qiladi. Bundan tashqari, raqamli vositalar o'qituvchi va talaba o'rtasidagi hamkorlikni yangi bosqichga ko'taradi. Shuningdek, bu yondashuv ta'lim sifatini oshirishda muhim ahamiyat kasb etadi. Natijada, zamonaviy ta'lim muhiti yanada samarali va innovatsion tus oladi.
+
+Raqamli ta'lim muhitida mustaqil ishni tashkil etish kompleks yondashuvni talab qiladi. Birinchidan, o'quv materiallari tizimli va keng qamrovli bo'lishi lozim. Ikkinchidan, baholash mezonlari aniq va shaffof bo'lishi muhim ahamiyatga ega. Uchinchidan, talabalarning faolligini oshirish uchun innovatsion usullardan foydalanish zarur. Shu bilan birga, o'qituvchilarning raqamli kompetensiyasi ham muhim o'rin tutadi. Xulosa qilib aytganda, kompleks yondashuv ta'lim sifatini yangi bosqichga ko'taradi.
+
+II BOB. TAJRIBA-SINOV ISHLARI VA NATIJALAR
+
+2.1. Tadqiqot metodikasi
+
+So'rovnoma savollari R. Laykert shkalasi (1–5) asosida tuzildi va dastlab 36 nafar talabada sinovdan o'tkazildi. Sinovdan keyin uchta savol olib tashlandi: talabalar ularni bir xil tushunmagan edi. Masalan, "platformadan foydalanish qulayligi" iborasini ba'zilar internet tezligi deb, boshqalar esa interfeys deb talqin qilgan. Yakuniy anketa 24 savoldan iborat bo'ldi. Kronbax alfa koeffitsienti 0,81 ga teng chiqdi, bu ichki muvofiqlikni qoniqarli deb hisoblashga imkon beradi [7]. Ma'lumotlar SPSS 26 dasturida qayta ishlandi; guruhlar orasidagi farqlar Manna–Uitni mezoni bilan tekshirildi.
+
+Natijalar kutilganidan biroz boshqacha chiqdi. Raqamli platformada ishlagan talabalarning o'rtacha bahosi 3,9 ball, an'anaviy guruhlarda esa 3,7 ball bo'ldi – farq statistik jihatdan ahamiyatli emas (p = 0,12). Ammo topshiriqni muddatida topshirish ko'rsatkichi keskin farq qildi: 78 foizga qarshi 41 foiz. Demak, platforma bilimni emas, balki intizomni o'zgartirgan. Suhbatlarda talabalar eslatma xabarlari va muddatlarni ko'rinib turishini eng foydali deb aytishdi. Bir talaba shunday dedi: "Muddatni ko'rib turganimda, kechiktirishga uyalaman".
+
+2.2. Natijalar tahlili
+
+Shuni ta'kidlash joizki, raqamli platformalar talabalarga yangi imkoniyatlar ochib beradi. Ular o'quv materiallariga istalgan vaqtda murojaat qilish imkonini yaratadi. Shu bilan birga, ular mustaqil fikrlash ko'nikmalarini rivojlantirishga xizmat qiladi. Bundan tashqari, raqamli vositalar ta'lim jarayonini shaxsiylashtirishda muhim rol o'ynaydi. Shuningdek, ular talabalarning motivatsiyasini oshirishda alohida ahamiyatga ega. Natijada, ta'lim jarayoni yanada samarali, innovatsion va zamonaviy tus oladi.
+
+Mustaqil ish soatlari o'quv rejasida umumiy yuklamaning qariyb 40 foizini tashkil qiladi, lekin amalda bu soatlar ko'pincha nazoratsiz qoladi. 2022 yil kuzgi semestrda biz kuzatgan 18 ta guruhdan faqat 7 tasida topshiriqlar muddatida tekshirilgan. Qolgan guruhlarda o'qituvchilar topshiriqlarni semestr oxirida, yakuniy nazorat oldidan bir yo'la qabul qilishgan. Bu holat A. Karimovning [3, 45-b.] ta'kidlaganidek, mustaqil ishni rasmiyatchilikka aylantiradi. Nega shunday? Birinchi sabab – o'qituvchi yuklamasi: bitta dotsentga o'rtacha 96 nafar talaba to'g'ri keladi. Ikkinchi sabab texnik edi, chunki Moodle tizimi 2021 yilgacha faqat ikki fakultetda ishlagan.
+
+XULOSA
+
+Xulosa qilib aytganda, raqamli ta'lim muhitida mustaqil ishni tashkil etish dolzarb masalalardan biri hisoblanadi. Shuni ta'kidlash kerakki, bu jarayon kompleks yondashuvni talab qiladi. Shu bilan birga, raqamli platformalar ta'lim sifatini oshirishda hal qiluvchi rol o'ynaydi. Bundan tashqari, ular talabalarning mustaqil faoliyatini samarali tashkil etishga xizmat qiladi. Shuningdek, bu yondashuv ta'lim tizimining barqaror rivojlanishini ta'minlaydi. Natijada, zamonaviy ta'lim yangi bosqichga ko'tariladi.
+
+FOYDALANILGAN ADABIYOTLAR RO'YXATI
+
+1. Abdullayeva N. Oliy ta'limda mustaqil ish. – Toshkent: Fan, 2019. – 184 b. (namuna)
+
+2. Bekmurodov S. Raqamli pedagogika asoslari. – Toshkent, 2020. – 212 b. (namuna)
+
+3. Karimov A. Talabalar mustaqil ishini nazorat qilish // Ta'lim va innovatsiya. – 2021. – №4. – B. 40–47. (namuna)
+
+4. Rashidova D. Masofaviy ta'lim platformalari. – Samarqand, 2022. – 150 b. (namuna)
+
+5. Tursunov B. Baholash mezonlari. – Toshkent, 2018. (namuna)
+
+6. Yusupov O. Moodle tizimida kurs yaratish. – Toshkent, 2021. – 96 b. (namuna)
+
+7. Cronbach L. Coefficient alpha and the internal structure of tests // Psychometrika. – 1951. – Vol. 16. – P. 297–334.
