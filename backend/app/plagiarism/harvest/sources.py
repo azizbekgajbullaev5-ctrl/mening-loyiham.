@@ -37,6 +37,8 @@ class OJSHarvester(Harvester):
     def harvest(self, target: str, limit: int) -> Iterator[HarvestItem]:
         base = target.rstrip("/")
         endpoint = base if base.endswith("/oai") else base + "/oai"
+        if not self._robots_ok(endpoint):
+            raise RuntimeError("robots_disallow: jurnal robots.txt OAI-PMH ga ruxsat bermaydi")
         params: dict = {"verb": "ListRecords", "metadataPrefix": "oai_dc"}
         n = 0
         while n < limit:
@@ -56,7 +58,8 @@ class OJSHarvester(Harvester):
                     _year(" ".join(vals("date"))), doi, url, extra={"language": (vals("language") or [""])[0]},
                 )
                 if url and get_settings().HARVEST_FETCH_FULLTEXT:
-                    item.pdf_url = self._galley_pdf(url)
+                    # resolved only for new articles (after the duplicate check), so re-harvesting a journal is cheap
+                    item.extra["resolve_pdf"] = lambda url=url: self._galley_pdf(url)
                 yield item
                 n += 1
                 if n >= limit:
@@ -66,9 +69,18 @@ class OJSHarvester(Harvester):
                 return
             params = {"verb": "ListRecords", "resumptionToken": token.text.strip()}
 
+    def _robots_ok(self, url: str) -> bool:
+        from app.plagiarism.web import Fetcher
+
+        if not hasattr(self, "_fetcher"):
+            self._fetcher = Fetcher()
+        return self._fetcher.allowed(url)
+
     def _galley_pdf(self, article_url: str) -> str | None:
-        """OJS article page -> first PDF galley download link."""
+        """OJS article page -> first PDF galley download link (only if robots.txt allows the page)."""
         try:
+            if not self._robots_ok(article_url):
+                return None
             html = self.get(article_url).text
         except Exception:  # noqa: BLE001
             return None

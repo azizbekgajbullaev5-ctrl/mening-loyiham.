@@ -337,6 +337,7 @@ def test_same_name_different_work_is_still_compared(user_client):
 
 
 def test_web_check_can_be_declined(user_client, monkeypatch):
+    monkeypatch.setattr(config.get_settings(), "BRAVE_API_KEY", SecretStr("test-key"))
     monkeypatch.setattr(web, "BraveClient", FakeBrave)
     FakeBrave.calls = 0
     aid = upload(user_client, "noweb.docx", make_docx(UZ["human"]), web_check="true")["analysis"]["id"]

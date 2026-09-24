@@ -24,7 +24,7 @@ from app.core.config import get_settings
 from app.document_processing.structure import Section
 from app.document_processing.types import Block
 from app.models import Document, DocumentFingerprint, RefDocument
-from app.plagiarism import corpus, embeddings
+from app.plagiarism import corpus, embeddings, templates
 from app.plagiarism.fingerprint import K, WINNOW, shingles
 from app.plagiarism.textnorm import canonical_stopwords, display_text, tokenize
 
@@ -32,6 +32,11 @@ EXCLUDE_SECTION_KINDS = {"references": "references", "toc": "toc", "title": "tit
 _QUOTE_RE = re.compile(r"«[^«»]{12,1500}»|“[^“”]{12,1500}”|„[^„“”]{12,1500}[“”]|\"[^\"]{12,1500}\"")
 _CITE_AFTER_RE = re.compile(r"^\s*[,.;:]?\s*(\[\s*\d+[^\]]{0,30}\]|\([^()]{0,80}?(19|20)\d{2}[a-z]?[^()]{0,20}\)|\[\s*[A-ZА-ЯЁa-z][^\]]{0,60}\])")
 _MATH_CHARS = set("=+−-*/^_∑∫√≈≠≤≥×÷±∞∂∆∇αβγδεθλμπσφω(){}[]|<>0123456789.,")
+
+
+def _ref_module(d) -> str:
+    """Reference documents harvested from OJS journals form their own module."""
+    return "ojs" if d.source_type == "ojs" else "corpus"
 
 
 def is_formula(text: str) -> bool:
@@ -46,9 +51,16 @@ def is_formula(text: str) -> bool:
 
 @dataclass
 class WebSource:
+    """A source found online in this check (web page, scholarly record, patent, legal act, …)."""
+
     url: str
     title: str
     hashes: set[int]
+    module: str = "web"
+    authors: str = ""
+    year: int | None = None
+    vectors: np.ndarray | None = None  # chunk embeddings (paraphrase / translation)
+    language: str | None = None
 
 
 @dataclass
@@ -63,6 +75,7 @@ class Source:
     doc_kind: str | None = None
     covered: np.ndarray | None = None  # bool mask over checked tokens
     paraphrase: np.ndarray | None = None
+    translated: np.ndarray | None = None  # cross-language (translated) part of ``paraphrase``
     max_similarity: float | None = None
 
 
@@ -157,14 +170,21 @@ def compare(
     progress=None,
     run_paraphrase: bool = True,
     exclude_own: set[str] | frozenset[str] = frozenset(),
+    enabled: set[str] | None = None,
+    doc_language: str | None = None,
 ) -> tuple[Outcome, TokenStream]:
-    """``exclude_own``: the user's documents that are copies of this one (never reported as sources)."""
+    """``exclude_own``: the user's documents that are copies of this one (never reported as sources).
+    ``enabled``: module keys (see modules.py); None = legacy behaviour (corpus incl. OJS, own documents)."""
     s = get_settings()
+    if enabled is None:
+        enabled = ({"corpus", "ojs"} if use_corpus else set()) | ({"own"} if document is not None else set())
+    use_corpus = bool({"corpus", "ojs"} & enabled)
     stream, exclusions = build_stream(blocks, sections)
     n = len(stream.canon)
     stop = canonical_stopwords()
     sh = shingles(stream.canon, stop)
     modules: dict = {"corpus": False, "own": False, "web": False, "paraphrase": False}
+    corpus_modules = {"corpus", "ojs"} & enabled
     sources: list[Source] = []
 
     # ---- reference corpus
@@ -180,13 +200,15 @@ def compare(
             if doc_id not in docs:
                 continue
             d = docs[doc_id]
-            sources.append(Source(f"ref:{doc_id}", "corpus", d.title, d.source_url or (f"https://doi.org/{d.doi}" if d.doi else None),
+            if _ref_module(d) not in corpus_modules:
+                continue
+            sources.append(Source(f"ref:{doc_id}", _ref_module(d), d.title, d.source_url or (f"https://doi.org/{d.doi}" if d.doi else None),
                                   d.authors, d.year, doc_id, d.doc_kind, covered=_cover_from_hits(n, hits)))
     if progress:
         progress("corpus")
 
     # ---- the user's own earlier documents
-    if document is not None and sh:
+    if document is not None and sh and "own" in enabled:
         modules["own"] = True
         hashes = list({h for h, _ in sh})
         per_own: dict[str, list[tuple[int, None]]] = defaultdict(list)
@@ -212,19 +234,21 @@ def compare(
 
     # ---- web pages
     if web_sources:
-        modules["web"] = True
         for ws in web_sources:
+            modules[ws.module] = True
             hits = [(g, None) for h, g in sh if h in ws.hashes]
             if len(hits) >= 2:
-                sources.append(Source(f"web:{ws.url}", "web", ws.title or ws.url, ws.url, covered=_cover_from_hits(n, hits)))
+                sources.append(Source(f"{ws.module}:{ws.url}", ws.module, ws.title or ws.url, ws.url, ws.authors, ws.year,
+                                      covered=_cover_from_hits(n, hits)))
 
     verbatim_any = np.zeros(n, dtype=bool)
     for src in sources:
         verbatim_any |= src.covered
 
     # ---- paraphrase / semantic similarity against the corpus
-    if use_corpus and run_paraphrase and n >= 40:
-        para = _paraphrase(db, stream, verbatim_any, sources)
+    live = [ws for ws in web_sources or [] if ws.vectors is not None]
+    if run_paraphrase and n >= 40 and (use_corpus or live):
+        para = _paraphrase(db, stream, verbatim_any, sources, corpus_modules, live, doc_language, "translation" in enabled)
         if para is not None:
             modules["paraphrase"] = para
     if progress:
@@ -232,13 +256,27 @@ def compare(
 
     # ---- classify tokens
     min_words = s.PLAGIARISM_MIN_SOURCE_WORDS
+    template = np.zeros(n, dtype=bool)
+    template_matched = 0
+    if "templates" in enabled and n:
+        template, occurrences = templates.mask(stream.canon)
+        before = np.zeros(n, dtype=bool)
+        for src in sources:
+            before |= src.covered
+            src.covered &= ~template  # standard phrases are never "borrowed"
+        template_matched = int((before & template).sum())
     sources = [src for src in sources if int(src.covered.sum()) >= min_words]
     matched_any = np.zeros(n, dtype=bool)
     para_any = np.zeros(n, dtype=bool)
+    trans_any = np.zeros(n, dtype=bool)
     for src in sources:
         matched_any |= src.covered
         if src.paraphrase is not None:
             para_any |= src.paraphrase
+        if src.translated is not None:
+            trans_any |= src.translated
+    if "templates" in enabled:
+        modules["templates"] = {"occurrences": int(occurrences), "words": int(template.sum()), "excluded_from_borrowing": template_matched}
     citation = stream.cited | (stream.quoted & matched_any)
     borrowing = matched_any & ~citation
     denom = max(1, n)
@@ -261,6 +299,7 @@ def compare(
             "ref_doc_id": src.ref_doc_id, "doc_kind": src.doc_kind,
             "share_text": pct(cov), "share_report": pct(excl), "words": int(cov.sum()),
             "paraphrase_words": int((src.paraphrase & cov).sum()) if src.paraphrase is not None else 0,
+            "translation_words": int((src.translated & cov).sum()) if src.translated is not None else 0,
             "max_similarity": src.max_similarity,
         })
     # citation spans are attributed to the best matching source when there is one
@@ -269,7 +308,8 @@ def compare(
         m = src.covered & citation & (cit_owner < 0)
         cit_owner[m] = idx
 
-    spans = _spans(stream, borrowing, citation, para_any, owner, cit_owner)
+    spans = _spans(stream, borrowing, citation, para_any, owner, cit_owner, trans_any)
+    modules["translation_share"] = pct(trans_any & borrowing)
     excluded_words = sum(exclusions.values())
     outcome = Outcome(
         checked_words=n, excluded_words=excluded_words, originality=originality_pct, borrowing=borrowing_pct, citation=citation_pct,
@@ -278,81 +318,143 @@ def compare(
     return outcome, stream
 
 
-def _paraphrase(db: Session, stream: TokenStream, verbatim_any: np.ndarray, sources: list[Source]) -> dict | None:
+def _paraphrase(db: Session, stream: TokenStream, verbatim_any: np.ndarray, sources: list[Source],
+                corpus_modules: set[str] | None = None, live: list[WebSource] | None = None,
+                doc_language: str | None = None, translation: bool = False) -> dict | None:
+    """Semantic matches (paraphrase) against reference-corpus chunk vectors and against online sources
+    fetched in this check. A match with a source in another language is a *translation* (only when the
+    translation module is on and a multilingual model is loaded: hash vectors cannot cross languages)."""
     s = get_settings()
-    ids, centroids = corpus.vector_index.centroids(db)
-    if centroids is None or not len(ids):
-        return None
+    corpus_modules = {"corpus", "ojs"} if corpus_modules is None else corpus_modules
+    live = live or []
     be = embeddings.get_backend()
     hash_backend = isinstance(be, embeddings.HashBackend)
     threshold = s.PARAPHRASE_THRESHOLD_HASH if hash_backend else s.PARAPHRASE_THRESHOLD_MODEL
+    cross_ok = translation and not hash_backend
+    doc_lang = doc_language if doc_language and doc_language != "unknown" else None
+
+    def is_cross(lang: str | None) -> bool:
+        return bool(doc_lang and lang and lang != "unknown" and lang != doc_lang)
+
+    ids, centroids = corpus.vector_index.centroids(db) if corpus_modules else ([], None)
+    if (centroids is None or not len(ids)) and not live:
+        return None
     spans = embeddings.chunk_windows(stream.canon)
     spans = [(a, b) for a, b in spans if verbatim_any[a:b].mean() < 0.5 and not stream.cited[a:b].any()]
     if not spans:
         return {"backend": be.id, "chunks": 0, "matches": 0}
     source_words = stream.canon if hash_backend else stream.words
     q = be.encode([" ".join(source_words[a:b]) for a, b in spans])
-    # candidate documents: centroid similarity of document segments + documents with fingerprint hits
-    seg = max(1, len(q) // 20)
-    seg_c = np.vstack([q[i : i + seg].mean(axis=0) for i in range(0, len(q), seg)])
-    seg_c /= np.maximum(np.linalg.norm(seg_c, axis=1, keepdims=True), 1e-9)
-    sims = seg_c @ centroids.T
-    top = set(np.argsort(-sims.max(axis=0))[: s.PARAPHRASE_CANDIDATE_DOCS].tolist())
-    same_backend = set(ids)  # vectors of another backend/dimension are never compared
-    cand = ({ids[i] for i in top} | {src.ref_doc_id for src in sources if src.ref_doc_id}) & same_backend
+
+    # ---- candidates: key -> (matrix loader, language)
+    cand: dict[str, tuple] = {}
+    if centroids is not None and len(ids):
+        meta_rows = {r[0]: (r[1], r[2]) for r in db.execute(select(RefDocument.id, RefDocument.source_type, RefDocument.language)
+                                                             .where(RefDocument.id.in_(ids)))}
+        seg = max(1, len(q) // 20)
+        seg_c = np.vstack([q[i : i + seg].mean(axis=0) for i in range(0, len(q), seg)])
+        seg_c /= np.maximum(np.linalg.norm(seg_c, axis=1, keepdims=True), 1e-9)
+        best = (seg_c @ centroids.T).max(axis=0)
+        order = np.argsort(-best)
+        chosen: list[int] = []
+        per_lang: dict[str, int] = defaultdict(int)
+        for i in order:
+            st, lang = meta_rows.get(ids[i], ("upload", None))
+            if ("ojs" if st == "ojs" else "corpus") not in corpus_modules:
+                continue
+            if is_cross(lang) and not cross_ok:
+                continue
+            # centroids of other-language documents score lower: give every language its own quota
+            key_lang = lang or "?"
+            if len(chosen) < s.PARAPHRASE_CANDIDATE_DOCS or (cross_ok and per_lang[key_lang] < 10):
+                chosen.append(i)
+                per_lang[key_lang] += 1
+            if len(chosen) >= s.PARAPHRASE_CANDIDATE_DOCS * 2:
+                break
+        fp_docs = {src.ref_doc_id for src in sources if src.ref_doc_id}
+        for i in chosen:
+            cand[f"ref:{ids[i]}"] = ("ref", ids[i], meta_rows.get(ids[i], (None, None))[1])
+        for d in fp_docs & set(ids):
+            lang = meta_rows.get(d, (None, None))[1]
+            if not (is_cross(lang) and not cross_ok):
+                cand.setdefault(f"ref:{d}", ("ref", d, lang))
+    live_by_key = {}
+    for ws in live:
+        if is_cross(ws.language) and not cross_ok:
+            continue
+        key = f"{ws.module}:{ws.url}"
+        live_by_key[key] = ws
+        cand[key] = ("live", key, ws.language)
+
     best_score = np.zeros(len(spans), dtype=np.float32)
-    best_doc: list[str | None] = [None] * len(spans)
-    best_vec = np.zeros_like(q)
-    for doc_id in cand:
-        _, mat = corpus.vector_index.chunk_vectors(db, [doc_id])
-        if mat is None:
+    best_key: list[str | None] = [None] * len(spans)
+    mats: dict[str, np.ndarray] = {}
+    for key, (kind, ref, lang) in cand.items():
+        if kind == "ref":
+            _, mat = corpus.vector_index.chunk_vectors(db, [ref])
+        else:
+            mat = live_by_key[ref].vectors
+        if mat is None or not len(mat) or mat.shape[1] != q.shape[1]:
             continue
         sims_doc = q @ mat.T
         idx = sims_doc.argmax(axis=1)
         sc = sims_doc[np.arange(len(q)), idx]
+        if is_cross(lang):
+            sc = sc - (s.TRANSLATION_THRESHOLD - threshold)  # compare against the cross-language threshold
         better = sc > best_score
+        if better.any():
+            mats[key] = mat
         best_score[better] = sc[better]
-        best_vec[better] = mat[idx[better]]
         for i in np.nonzero(better)[0]:
-            best_doc[i] = doc_id
+            best_key[i] = key
 
-    # Windows are coarse (50 words) and can spill into neighbouring paragraphs. Marking is
-    # therefore decided per paragraph: a paragraph touched by a matching window is marked only
-    # if the paragraph's own text is similar enough to the matched source chunk.
+    # Windows are coarse (50 words, stride 25) and can spill into neighbouring paragraphs. Marking is
+    # therefore verified per paragraph piece: every paragraph touched by a matching window is cut into
+    # ~50-word pieces, and only pieces that are themselves similar to some chunk of that source are marked.
     n = len(stream.canon)
     block_tokens: dict[int, list[int]] = {}
     for i, b in enumerate(stream.block):
         block_tokens.setdefault(b, []).append(i)
     per_block: dict[int, dict[str, list[int]]] = {}
     for i, (a, b) in enumerate(spans):
-        doc_id = best_doc[i]
-        if not doc_id or best_score[i] < threshold:
+        key = best_key[i]
+        if not key or best_score[i] < threshold:
             continue
         for blk in set(stream.block[a:b]):
-            per_block.setdefault(blk, {}).setdefault(doc_id, []).append(i)
-    by_key = {src.ref_doc_id: src for src in sources if src.ref_doc_id}
-    new_docs = {d for m in per_block.values() for d in m if d not in by_key}
-    meta = {d.id: d for d in db.scalars(select(RefDocument).where(RefDocument.id.in_(list(new_docs))))} if new_docs else {}
-    block_ids = list(per_block)
-    block_vecs = be.encode([" ".join(source_words[j] for j in block_tokens[blk]) for blk in block_ids]) if block_ids else None
-    matches = 0
-    for k, blk in enumerate(block_ids):
-        toks = np.array(block_tokens[blk])
-        if len(toks) < 8 or verbatim_any[toks].mean() > 0.5:
+            per_block.setdefault(blk, {}).setdefault(key, []).append(i)
+    by_key = {src.key: src for src in sources}
+    new_refs = {cand[k][1] for m in per_block.values() for k in m if k not in by_key and cand[k][0] == "ref"}
+    meta = {d.id: d for d in db.scalars(select(RefDocument).where(RefDocument.id.in_(list(new_refs))))} if new_refs else {}
+    matches = translations = 0
+    for blk in per_block:
+        toks_all = np.array(block_tokens[blk])
+        if len(toks_all) < 8 or verbatim_any[toks_all].mean() > 0.5:
             continue
-        doc_id, wins = max(per_block[blk].items(), key=lambda kv: max(best_score[w] for w in kv[1]))
-        sim = float(max(block_vecs[k] @ best_vec[w] for w in wins))
-        if sim < threshold - 0.05:
+        key, _wins = max(per_block[blk].items(), key=lambda kv: max(best_score[w] for w in kv[1]))
+        kind, ref, lang = cand[key]
+        cross = is_cross(lang)
+        pieces = _pieces(toks_all)
+        pv = be.encode([" ".join(source_words[j] for j in piece) for piece in pieces])
+        piece_sims = (pv @ mats[key].T).max(axis=1)
+        need = (s.TRANSLATION_THRESHOLD if cross else threshold) - 0.05
+        good = [piece for piece, sc in zip(pieces, piece_sims) if sc >= need]
+        if not good:
             continue
-        src = by_key.get(doc_id)
+        toks = np.concatenate(good)
+        sim = float(piece_sims.max())
+        src = by_key.get(key)
         if src is None:
-            d = meta.get(doc_id)
-            if d is None:
-                continue
-            src = Source(f"ref:{doc_id}", "corpus", d.title, d.source_url or (f"https://doi.org/{d.doi}" if d.doi else None),
-                         d.authors, d.year, doc_id, d.doc_kind, covered=np.zeros(n, dtype=bool))
+            if kind == "ref":
+                d = meta.get(ref)
+                if d is None:
+                    continue
+                src = Source(key, _ref_module(d), d.title, d.source_url or (f"https://doi.org/{d.doi}" if d.doi else None),
+                             d.authors, d.year, ref, d.doc_kind, covered=np.zeros(n, dtype=bool))
+            else:
+                ws = live_by_key[ref]
+                src = Source(key, ws.module, ws.title or ws.url, ws.url, ws.authors, ws.year, covered=np.zeros(n, dtype=bool))
             sources.append(src)
-            by_key[doc_id] = src
+            by_key[key] = src
         if src.paraphrase is None:
             src.paraphrase = np.zeros(n, dtype=bool)
         region = np.zeros(n, dtype=bool)
@@ -360,20 +462,37 @@ def _paraphrase(db: Session, stream: TokenStream, verbatim_any: np.ndarray, sour
         region &= ~verbatim_any
         src.paraphrase |= region
         src.covered |= region
+        if cross:
+            if src.translated is None:
+                src.translated = np.zeros(n, dtype=bool)
+            src.translated |= region
+            translations += 1
         src.max_similarity = round(max(src.max_similarity or 0.0, sim), 3)
         matches += 1
-    return {"backend": be.id, "chunks": len(spans), "matches": matches, "threshold": threshold}
+    return {"backend": be.id, "chunks": len(spans), "matches": matches, "translations": translations, "threshold": threshold,
+            "translation": cross_ok, "translation_threshold": s.TRANSLATION_THRESHOLD if cross_ok else None,
+            "candidates": len(cand)}
 
 
-def _spans(stream: TokenStream, borrowing, citation, para_any, owner, cit_owner) -> list[list]:
-    """[[block_index, char_start, char_end, source_index, cls]] with cls b=borrowed, p=paraphrase, c=citation."""
+def _pieces(toks: np.ndarray, size: int = embeddings.WINDOW) -> list[np.ndarray]:
+    """Consecutive pieces of about ``size`` tokens; a short tail is merged into the previous piece."""
+    out = [toks[i : i + size] for i in range(0, len(toks), size)]
+    if len(out) > 1 and len(out[-1]) < size // 2:
+        tail = out.pop()
+        out[-1] = np.concatenate([out[-1], tail])
+    return out
+
+
+def _spans(stream: TokenStream, borrowing, citation, para_any, owner, cit_owner, trans_any=None) -> list[list]:
+    """[[block_index, char_start, char_end, source_index, cls]] with cls b=borrowed, p=paraphrase, t=translated, c=citation."""
     out: list[list] = []
     cur = None
     for i in range(len(stream.canon)):
         if citation[i]:
             key = (stream.block[i], int(cit_owner[i]), "c")
         elif borrowing[i]:
-            key = (stream.block[i], int(owner[i]), "p" if para_any[i] else "b")
+            cls = "t" if (trans_any is not None and trans_any[i]) else ("p" if para_any[i] else "b")
+            key = (stream.block[i], int(owner[i]), cls)
         else:
             key = None
         if key and cur and cur[0] == key and cur[2] == i - 1:

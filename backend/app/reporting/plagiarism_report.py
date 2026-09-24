@@ -32,13 +32,16 @@ L = {
         "web_yes": ", internet (Brave, {q} so'rov, ≈${c})", "sources": "MANBALAR", "no_sources": "Manbalarda moslik topilmadi.",
         "h_n": "№", "h_rep": "Hisobotdagi ulush", "h_text": "Matndagi ulush", "h_src": "Manba", "h_mod": "Modul",
         "tricks": "TEXNIK HIYLALAR (OGOHLANTIRISH)", "no_tricks": "Texnik hiylalar aniqlanmadi.",
-        "text": "TEKSHIRILGAN MATN", "legend": "Rangli fon — manbadagi moslik ([n] — manba raqami); kursiv — parafraz; kulrang — iqtibos.",
+        "text": "TEKSHIRILGAN MATN", "legend": "Rangli fon — manbadagi moslik ([n] — manba raqami); kursiv — parafraz; kursiv va tagiga chizilgan — tarjima; kulrang — iqtibos.",
         "no_text": "Asl fayl o'chirilgan — matn ko'rinishi mavjud emas.", "para": "parafraz",
         "disclaimer": "Hisobot avtomatik yaratilgan va ekspert xulosasi o'rnini bosmaydi. Yakuniy qaror matnni ko'rib chiqqan mutaxassis tomonidan qabul qilinadi.",
         "corpus": "Ma'lumotnoma bazasi ({n} hujjat)", "own": "Sizning hujjatlaringiz", "web": "Internet (Brave)", "paraphrase": "Semantik o'xshashlik ({b})",
         "dup": "Bu hujjat avval yuklangan. Quyidagi nusxa(lar) solishtiruvdan chiqarildi: {items}.",
         "dup_reasons": {"same_file": "aynan shu fayl", "same_name": "bir xil nom", "same_text": "bir xil matn"},
         "web_pages": "TEKSHIRILGAN INTERNET SAHIFALARI",
+        "checked_in": "{n} ta moduldan {m} tasida tekshirilgan",
+        "mod_states": {"checked": "tekshirildi", "off": "o'chirilgan", "unavailable": "sozlanmagan", "error": "xato"},
+        "mod_found": "{n} ta manba", "mod_tpl": "{n} so'z o'zlashtirishga qo'shilmadi", "translation": "tarjima",
         "web_line": "{q} so'rov, {r} natija; {ok} sahifa yuklandi, {c} keshdan, {f} yuklanmadi.",
         "h_page": "Sahifa", "h_status": "Holat", "h_found": "Natija", "found": "manba [{n}]", "not_found": "moslik yo'q",
         "more_pages": "… va yana {n} ta sahifa.",
@@ -61,6 +64,9 @@ L = {
         "dup": "This document was uploaded before. These copies were left out of the comparison: {items}.",
         "dup_reasons": {"same_file": "same file", "same_name": "same name", "same_text": "same text"},
         "web_pages": "CHECKED WEB PAGES",
+        "checked_in": "checked in {m} of {n} modules",
+        "mod_states": {"checked": "checked", "off": "off", "unavailable": "not configured", "error": "error"},
+        "mod_found": "{n} sources", "mod_tpl": "{n} words not counted as borrowing", "translation": "translation",
         "web_line": "{q} queries, {r} results; {ok} pages downloaded, {c} from cache, {f} failed.",
         "h_page": "Page", "h_status": "Status", "h_found": "Result", "found": "source [{n}]", "not_found": "no match",
         "more_pages": "… and {n} more pages.",
@@ -120,9 +126,32 @@ def render_plagiarism_pdf(a, user, lang: str = "uz") -> bytes:
         [t["size"], f"{v.page_count if v else '—'} {t['pages']}, {v.word_count if v else '—'} {t['words']}"],
         [t["modules"], "; ".join(mod_names) or "—"],
     ]
+    checks = mods.get("checks") or []
+    if checks:
+        info[-1] = [t["modules"], t["checked_in"].format(n=mods.get("module_total", len(checks)), m=mods.get("checked_count", 0))]
     tbl = Table([[P(k, small), P(val)] for k, val in info], colWidths=[45 * mm, 125 * mm])
     tbl.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.HexColor("#e1e0d9")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story += [tbl, Spacer(1, 8), P(t["results"], h2)]
+    story += [tbl]
+    if checks:
+        rows = []
+        for c in checks:
+            note = c.get("reason") or ""
+            if c.get("state") == "checked":
+                bits = []
+                if c.get("sources_found"):
+                    bits.append(t["mod_found"].format(n=c["sources_found"]))
+                if c.get("excluded_words"):
+                    bits.append(t["mod_tpl"].format(n=c["excluded_words"]))
+                if c.get("errors"):
+                    bits.append(str(c["errors"][0])[:80])
+                note = "; ".join(bits)
+            mark = "✓" if c.get("state") == "checked" else "–"
+            rows.append([P(f"{mark} {c['label']}", small), P(t["mod_states"].get(c.get("state"), c.get("state")), small), P(note, small)])
+        mt = Table(rows, colWidths=[62 * mm, 26 * mm, 82 * mm])
+        mt.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.2, colors.HexColor("#e1e0d9")), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                                ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5)]))
+        story += [Spacer(1, 4), mt]
+    story += [Spacer(1, 8), P(t["results"], h2)]
     res = Table([[P(t["orig"], small), P(t["borrow"], small), P(t["cite"], small)],
                  [P(f"{p['originality']:.2f}%", big(C_ORIG)), P(f"{p['borrowing']:.2f}%", big(C_BORROW)), P(f"{p['citation']:.2f}%", big(C_CITE))]],
                 colWidths=[57 * mm, 57 * mm, 56 * mm])
@@ -150,6 +179,8 @@ def render_plagiarism_pdf(a, user, lang: str = "uz") -> bytes:
                 label += f"\n{src['url']}"
             if src.get("paraphrase_words"):
                 label += f"\n[{t['para']}: {src['paraphrase_words']} {t['words']}]"
+            if src.get("translation_words"):
+                label += f"\n[{t['translation']}: {src['translation_words']} {t['words']}]"
             rows.append([P(f"[{i}]"), P(f"{src['share_report']:.2f}%"), P(f"{src['share_text']:.2f}%"), Paragraph(escape(label).replace("\n", "<br/>"), small), P(src["module_label"], small)])
             styles.append(("BACKGROUND", (0, i), (0, i), colors.HexColor(color_for(src["index"]))))
         st = Table(rows, colWidths=[12 * mm, 24 * mm, 22 * mm, 82 * mm, 30 * mm], repeatRows=1)
@@ -243,7 +274,7 @@ def _highlight(text: str, spans: list, src_num: dict[int, int]) -> str:
         else:
             n = src_num.get(src)
             mark = f'<super><font size="6">[{n}]</font></super>' if n else ""
-            inner = f"<i>{frag}</i>" if cls == "p" else frag
+            inner = f"<i>{frag}</i>" if cls == "p" else (f"<i><u>{frag}</u></i>" if cls == "t" else frag)
             out.append(f'{mark}<font backColor="{color_for(src)}">{inner}</font>')
         pos = end
     out.append(escape(text[pos:]))

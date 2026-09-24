@@ -7,6 +7,50 @@ share, the text coloured by source and a PDF report laid out like the Antiplagia
 It is separate from the AI-likelihood estimate: a borrowed passage is not "AI text", and an original
 passage is not "human text".
 
+## Check modules
+
+Every analysis has a list of enabled modules (`Analysis.check_modules`), chosen on upload, on the
+confirmation page and — for a re-check — on the result page. The result page and the PDF say
+**"N ta moduldan M tasida tekshirilgan"** and list each module as *checked / off / not configured / error*
+(a module where not a single request succeeded is *error* and not counted).
+
+| Module | Kind | What it compares with | Needs | Price |
+|---|---|---|---|---|
+| `corpus` Ma'lumotnoma bazasi | local | uploaded / harvested reference documents (verbatim + paraphrase) | — | free |
+| `own` Sizning hujjatlaringiz | local | the user's other uploads (earlier copies excluded) | — | free |
+| `ojs` O'zbek OJS jurnallari | local | articles harvested via OAI-PMH from `HARVEST_OJS_URLS` (own module) | journal URLs | free |
+| `scholarly` Ilmiy bazalar | online | OpenAlex, Crossref, Semantic Scholar, CORE, arXiv: abstracts + open-licence full texts | CORE: free key | free (rate-limited) |
+| `cyberleninka` CyberLeninka | online | open Russian articles (annotation + PDF) | — | free |
+| `patents` Patentlar | online | Lens.org patent API: abstract, claims, description | `LENS_API_TOKEN` | free for scholarly use |
+| `legal` Me'yoriy hujjatlar | online | lex.uz pages found via Brave `site:lex.uz` | `BRAVE_API_KEY` | Brave price |
+| `web` Internet | online | pages found via Brave Search | `BRAVE_API_KEY` | Brave price |
+| `translation` Tarjima | local | cross-language matches (uz ↔ ru ↔ en) with the multilingual model | model2vec | free |
+| `templates` Shablon iboralar | filter | standard phrases are removed from borrowing | — | free |
+
+Before an analysis with online modules starts it waits in `awaiting_confirmation`; the page shows per module
+the number of queries, API calls, downloads, approximate time and price, and modules can be switched off.
+Queries per online module: one per `MODULE_WORDS_PER_QUERY` (1000) words, at most `MODULE_MAX_QUERIES` (40);
+`MODULE_RESULTS_PER_QUERY` results and up to `MODULE_FULLTEXT_PER_QUERY` open full texts per query.
+
+**Licences and site rules.** Only open APIs are called, with their polite limits (arXiv ≤ 1 request / 3 s,
+Semantic Scholar 1/s without a key, OpenAlex/Crossref with the configured contact e-mail). Full texts are
+downloaded only when the record carries an open licence (Creative Commons / public domain) or comes from
+an open-access API (CORE, arXiv); otherwise only the abstract returned by the API is compared. Every page,
+PDF, OJS OAI endpoint/article page and the CyberLeninka search are fetched only if `robots.txt` allows it.
+Google Patents is not used (no public API; its terms do not allow automated querying). lex.uz legal acts
+are official documents. Nothing but fingerprints / vectors is cached.
+
+**Translation.** Chunk vectors of the checked text are compared with corpus chunks and with online texts in
+another language (`TRANSLATION_THRESHOLD`, default 0.80, heuristic). It needs the multilingual model
+(`minishlab/potion-multilingual-128M`, static embeddings, ~0.5 GB, a few hundred MB RAM); with hash vectors
+the module is shown as not configured. If the first start chose hash vectors (no internet), delete
+`backend/data/models/embedding_backend.txt` while online and restart; documents indexed with hash vectors
+must be re-added to the corpus to be compared semantically.
+
+**Template phrases** (~100 uz/ru/en phrases such as "mavzuning dolzarbligi", "ushbu ishda", "актуальность
+темы", "the aim of this study"; extend with `TEMPLATE_PHRASES`): their words are removed from matches, and
+a match that becomes shorter than `PLAGIARISM_MIN_SOURCE_WORDS` disappears.
+
 ## Sources
 
 | Module | What is compared | Needs |
@@ -35,6 +79,16 @@ A same-named file with different text is still compared and only mentioned in th
   admin delete a document from the corpus.
 * Admins: the first registered user, plus anyone listed in `ADMIN_EMAILS`.
 
+### Bulk import (hundreds of files)
+
+* Folder picker in the browser (batches of 20 files, up to 500 per request).
+* **ZIP archive**: `POST /api/corpus/upload-zip` — up to `CORPUS_MAX_ZIP_MB` (1 GB), `CORPUS_MAX_FILES_PER_IMPORT`
+  (5000) documents; entries with an extreme compression ratio (zip bombs), macros or wrong signatures are
+  skipped; inner folders are kept.
+* **Local folder path** (single-PC mode: SQLite + thread worker, or `CORPUS_LOCAL_IMPORT=true`):
+  `POST /api/corpus/import-folder {"path": "C:\\Kutubxona"}` — files are read in place (never copied or
+  deleted), validated like uploads.
+
 ### Harvester
 
 Page *Ma'lumotnoma bazasi → Ochiq manbalardan yig'ish*. Jobs run one at a time in the background, survive a
@@ -42,7 +96,7 @@ restart (`recover()` on start) and can be cancelled. Every collected item goes t
 
 | Source | How | Settings |
 |---|---|---|
-| Uzbek OJS journals | OAI-PMH `ListRecords` (oai_dc, resumption tokens); PDF galley links | `HARVEST_OJS_URLS` (comma-separated journal base URLs) |
+| Uzbek OJS journals | OAI-PMH `ListRecords` (oai_dc, resumption tokens); PDF galley links (looked up only for new articles) | `HARVEST_OJS_URLS` (comma-separated journal base URLs); `OJS_AUTO_HARVEST_HOURS` re-harvests automatically |
 | OpenAlex | `/works?search=` with open-access filter; abstract or OA PDF | `HARVEST_QUERIES`, `OPENALEX_EMAIL`, `OPENALEX_FILTER` |
 | CORE | `/v3/search/works` with full text | `CORE_API_KEY` (free) |
 | Crossref | `/works?query=`; abstract (JATS stripped) or full-text link | `CROSSREF_MAILTO` |

@@ -8,7 +8,9 @@ It analyzes academic documents (DOCX / PDF / TXT, Uzbek-Latin / Russian / Englis
 
 * **AI-likelihood** — a probabilistic estimate of AI-like writing characteristics, per passage, section and
   chapter, with a LOW / MEDIUM / HIGH confidence label and an explanation;
-* **plagiarism (Antiplagiat-style)** — originality / borrowing / citation percentages against a reference
+* **plagiarism (Antiplagiat-style)** — 10 switchable check modules (reference corpus, own documents, Uzbek
+  OJS journals, scholarly databases, CyberLeninka, patents, lex.uz, internet, translation, template phrases);
+  originality / borrowing / citation percentages against a reference
   corpus (bulk folder upload, harvester for OJS / OpenAlex / CORE / Crossref / CyberLeninka), your own
   documents and, optionally, the internet via Brave Search; with Latin↔Cyrillic transliteration, paraphrase
   detection, citation/reference exclusion and hidden-text / homoglyph warnings — see
@@ -194,6 +196,8 @@ and *"Local/document similarity analysis only."*, and every external provider is
 | Provider | Enable with | Used |
 |---|---|---|
 | Brave Search API (internet plagiarism check) | `BRAVE_API_KEY` (`BRAVE_PRICE_PER_1000_USD`, `WEB_MAX_QUERIES`) | only when the user ticks it and confirms the shown price |
+| Scholarly databases module (OpenAlex, Crossref, Semantic Scholar, CORE, arXiv) | nothing (CORE: `CORE_API_KEY`, optional `SEMANTIC_SCHOLAR_API_KEY`) | only when the module is enabled and confirmed |
+| Patents module (Lens.org) | `LENS_API_TOKEN` | only when enabled and confirmed |
 | OpenAlex / Crossref / CORE / OJS / CyberLeninka | `OPENALEX_EMAIL`, `CROSSREF_MAILTO`, `CORE_API_KEY`, `HARVEST_OJS_URLS`, `HARVEST_QUERIES` | corpus harvester (admin) |
 | Generic AI-detection API | `AI_DETECTOR_API_URL` + `AI_DETECTOR_API_KEY` (+ score field/scale) | DEEP analysis, top suspicious passages |
 | Generic similarity/plagiarism API | `SIMILARITY_API_URL` + `SIMILARITY_API_KEY` | DEEP analysis, all body passages (batched) |

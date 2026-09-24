@@ -60,6 +60,7 @@ def analysis_summary(a: Analysis) -> dict:
         "ai_likelihood": r.ai_likelihood if r else None, "ai_confidence": r.ai_confidence if r else None,
         "similarity_overall": r.similarity_overall if r else None,
         "corpus_check": a.corpus_check, "web_check": a.web_check, "web_estimate": a.web_estimate or None,
+        "check_modules": _enabled_modules(a),
         "originality": a.plagiarism.originality if a.plagiarism else None,
         "borrowing": a.plagiarism.borrowing if a.plagiarism else None,
         "citation": a.plagiarism.citation if a.plagiarism else None,
@@ -165,6 +166,12 @@ INTEGRITY_LABELS = {
         "unusual_spaces": "Many unusual space characters",
     },
 }
+
+
+def _enabled_modules(a) -> list[str]:
+    from app.plagiarism import modules as plag_modules
+
+    return plag_modules.enabled_for(a)
 
 
 def plagiarism_out(p, lang: str = "uz") -> dict:

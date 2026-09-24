@@ -307,28 +307,83 @@ def _cached(db: Session, url: str) -> WebPageCache | None:
     return row if age < limit else None
 
 
-def _download(fetcher: Fetcher, url: str) -> tuple[str, list[int], str, int]:
-    """(title, sorted shingle hashes, status, words) — runs in a worker thread, no DB access."""
+def _download(fetcher: Fetcher, url: str) -> tuple[str, str, str]:
+    """(title, text, status) — runs in a worker thread, no DB access. The text is used in memory only."""
     try:
         title, text = fetcher.fetch_text(url)
-        words = canonical_words(text)
-        hs = sorted({h for h, _ in shingles(words, canonical_stopwords())})
-        if not hs:
-            return title, [], "no_text", len(words)
-        return title, hs, "ok", len(words)
+        return title, text, "ok"
     except Exception as exc:  # noqa: BLE001 - any fetch/parse problem is recorded, not fatal
-        return "", [], _failure_code(exc), 0
+        return "", "", _failure_code(exc)
 
 
-def _store(db: Session, url: str, title: str, hs: list[int], status: str, words: int) -> None:
+def text_hashes(text: str) -> tuple[list[int], int]:
+    words = canonical_words(text)
+    return sorted({h for h, _ in shingles(words, canonical_stopwords())}), len(words)
+
+
+MAX_VECTOR_CHUNKS = 400
+
+
+def text_vectors(text: str) -> tuple[np.ndarray | None, str]:
+    """Chunk embeddings of a source text (for paraphrase / translation matching) and the backend key."""
+    from app.plagiarism import embeddings
+    from app.plagiarism.textnorm import display_text, tokenize
+
+    be = embeddings.get_backend()
+    disp = display_text(text)
+    toks = tokenize(disp)
+    if len(toks) < 30:
+        return None, f"{be.id}|{be.dims}"
+    canon = [t.text for t in toks]
+    words = canon if isinstance(be, embeddings.HashBackend) else [disp[t.start : t.end] for t in toks]
+    spans = embeddings.chunk_windows(canon)[:MAX_VECTOR_CHUNKS]
+    return be.encode([" ".join(words[a:b]) for a, b in spans]), f"{be.id}|{be.dims}"
+
+
+def text_language(text: str) -> str | None:
+    from app.analyzers.languages.registry import detect_distribution
+
+    paras = [p for p in text.split("\n") if len(p) > 40][:60] or [text[:3000]]
+    lang, _, _ = detect_distribution(paras)
+    return lang if lang and lang != "unknown" else None
+
+
+def _store(db: Session, url: str, title: str, hs: list[int], status: str, words: int, module: str = "web",
+           language: str | None = None, vectors: np.ndarray | None = None, backend: str | None = None) -> None:
     row = db.scalar(select(WebPageCache).where(WebPageCache.url_hash == _url_key(url)))
     if row is None:
         row = WebPageCache(url_hash=_url_key(url), url=url[:1000])
         db.add(row)
-    row.title, row.status, row.word_count = title[:500], status, words
+    row.title, row.status, row.word_count, row.module, row.language = title[:500], status, words, module, language
     row.hashes = np.array(hs, dtype=np.int64).tobytes()
+    row.vectors = vectors.astype(np.float16).tobytes() if vectors is not None and len(vectors) else None
+    row.vector_backend = backend if row.vectors else None
     row.fetched_at = datetime.now(UTC)
     db.commit()
+
+
+def _row_vectors(row: WebPageCache) -> np.ndarray | None:
+    if not row.vectors or not row.vector_backend:
+        return None
+    from app.plagiarism import embeddings
+
+    be = embeddings.get_backend()
+    if row.vector_backend != f"{be.id}|{be.dims}":
+        return None  # another embedding backend: not comparable
+    return np.frombuffer(row.vectors, dtype=np.float16).astype(np.float32).reshape(-1, be.dims)
+
+
+@dataclass
+class FetchItem:
+    """One candidate source. ``text`` comes from an API (abstract, claims, CORE full text); ``download`` is
+    a page or open-licence PDF fetched honouring robots.txt. ``url`` is what the report links to."""
+
+    url: str
+    title: str = ""
+    text: str = ""
+    download: str | None = None
+    authors: str = ""
+    year: int | None = None
 
 
 def page_hashes(db: Session, url: str, title_hint: str, fetcher: Fetcher, stats: dict) -> WebSource | None:
@@ -336,37 +391,88 @@ def page_hashes(db: Session, url: str, title_hint: str, fetcher: Fetcher, stats:
     return fetch_pages(db, [(url, title_hint)], fetcher, stats)[0]
 
 
-def fetch_pages(db: Session, items: list[tuple[str, str]], fetcher: Fetcher, stats: dict, progress=None) -> list[WebSource | None]:
-    stats.setdefault("pages", [])
-    results: dict[str, WebSource | None] = {}
+def fetch_pages(db: Session, items: list[tuple[str, str]], fetcher: Fetcher, stats: dict, progress=None,
+                module: str = "web", with_vectors: bool = False) -> list[WebSource | None]:
+    return build_sources(db, [FetchItem(url, hint, download=url) for url, hint in items], fetcher, stats, module, progress, with_vectors)
+
+
+def build_sources(db: Session, items: list[FetchItem], fetcher: Fetcher, stats: dict, module: str = "web", progress=None,
+                  with_vectors: bool = False) -> list[WebSource | None]:
+    """Turn candidates into comparable sources (shingle hashes, optionally chunk vectors). Downloads are cached
+    by URL (fingerprints / vectors only). Every candidate gets a record in stats["pages"]."""
+    for key in ("pages",):
+        stats.setdefault(key, [])
+    for key in ("cached_pages", "fetched_pages", "failed_pages"):
+        stats.setdefault(key, 0)
+    downloaded: dict[str, tuple[str, list[int], str, int, np.ndarray | None, str | None]] = {}
     todo = []
-    for url, hint in items:
-        row = _cached(db, url)
+    for it in items:
+        if not it.download or it.download in downloaded:
+            continue
+        row = _cached(db, it.download)
         if row is None:
-            todo.append((url, hint))
+            todo.append(it.download)
             continue
         stats["cached_pages"] += 1
-        ok = row.status == "ok"
-        stats["pages"].append({"url": url, "title": row.title or hint, "status": row.status, "cached": True, "words": row.word_count})
-        results[url] = WebSource(url, row.title or hint, set(np.frombuffer(row.hashes, dtype=np.int64).tolist())) if ok else None
+        hs = np.frombuffer(row.hashes, dtype=np.int64).tolist() if row.status == "ok" else []
+        downloaded[it.download] = (row.title, hs, row.status, row.word_count, _row_vectors(row) if with_vectors else None, row.language)
+        stats["pages"].append({"url": it.download, "source_url": it.url, "title": row.title or it.title, "status": row.status,
+                               "cached": True, "words": row.word_count, "module": module})
     workers = max(1, get_settings().WEB_FETCH_WORKERS)
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(_download, fetcher, url): (url, hint) for url, hint in todo}
+        futures = {pool.submit(_download, fetcher, url): url for url in dict.fromkeys(todo)}
         for k, fut in enumerate(as_completed(futures), 1):
-            url, hint = futures[fut]
-            title, hs, status, words = fut.result()
-            title = title or hint
-            _store(db, url, title, hs, status, words)
+            url = futures[fut]
+            title, text, status = fut.result()
+            hs, words = text_hashes(text) if status == "ok" else ([], 0)
+            if status == "ok" and not hs:
+                status = "no_text"
+            vecs, backend = text_vectors(text) if (with_vectors and status == "ok") else (None, None)
+            lang = text_language(text) if status == "ok" else None
+            _store(db, url, title, hs, status, words, module, lang, vecs, backend)
             stats["fetched_pages" if status == "ok" else "failed_pages"] += 1
-            stats["pages"].append({"url": url, "title": title, "status": status, "cached": False, "words": words})
-            results[url] = WebSource(url, title, set(hs)) if status == "ok" else None
+            hint = next((it for it in items if it.download == url), None)
+            stats["pages"].append({"url": url, "source_url": hint.url if hint else url, "title": title or (hint.title if hint else ""),
+                                   "status": status, "cached": False, "words": words, "module": module})
+            downloaded[url] = (title, hs, status, words, vecs, lang)
             if progress:
-                progress(f"pages {k}/{len(todo)}")
-    return [results.get(url) for url, _ in items]
+                progress(f"{module} {k}/{len(futures)}")
+    out: list[WebSource | None] = []
+    for it in items:
+        hashes: set[int] = set()
+        vec_parts, lang, title = [], None, it.title
+        if it.text:
+            hs, words = text_hashes(it.text)
+            hashes.update(hs)
+            if with_vectors:
+                v, _ = text_vectors(it.text)
+                if v is not None:
+                    vec_parts.append(v)
+            lang = text_language(it.text)
+            if not it.download:
+                stats["pages"].append({"url": it.url, "source_url": it.url, "title": it.title, "status": "api_text" if hs else "no_text",
+                                       "cached": False, "words": words, "module": module})
+        if it.download and it.download in downloaded:
+            d_title, d_hs, d_status, _w, d_vec, d_lang = downloaded[it.download]
+            if d_status == "ok":
+                hashes.update(d_hs)
+                title = title or d_title
+                lang = lang or d_lang
+                if d_vec is not None:
+                    vec_parts.append(d_vec)
+        if not hashes:
+            out.append(None)
+            continue
+        vectors = np.vstack(vec_parts) if vec_parts else None
+        out.append(WebSource(it.url, title or it.url, hashes, module=module, authors=it.authors, year=it.year, vectors=vectors, language=lang))
+    return out
 
 
 def run(db: Session, stream: TokenStream, covered: np.ndarray, max_queries: int, brave: BraveClient | None = None,
-        fetcher: Fetcher | None = None, progress=None, abbreviations: tuple[str, ...] = ()) -> tuple[list[WebSource], dict]:
+        fetcher: Fetcher | None = None, progress=None, abbreviations: tuple[str, ...] = (), module: str = "web",
+        site: str | None = None, with_vectors: bool = False) -> tuple[list[WebSource], dict]:
+    """Search Brave for distinctive sentences and compare the found pages. ``site`` restricts the search
+    (the lex.uz module uses ``site:lex.uz``)."""
     s = get_settings()
     stats = {"queries_planned": max_queries, "queries_used": 0, "fetched_pages": 0, "cached_pages": 0, "failed_pages": 0,
              "results_total": 0, "queries_without_results": 0, "errors": [], "pages": [], "query_log": [],
@@ -382,7 +488,9 @@ def run(db: Session, stream: TokenStream, covered: np.ndarray, max_queries: int,
     urls: dict[str, str] = {}
     for i, q in enumerate(queries):
         try:
-            found = brave.search(q.text)
+            found = brave.search(f"site:{site} {q.text}" if site else q.text)
+            if site:
+                found = [r for r in found if _on_site(r["url"], site)]
             stats["queries_used"] += 1
             stats["results_total"] += len(found)
             if not found:
@@ -402,14 +510,19 @@ def run(db: Session, stream: TokenStream, covered: np.ndarray, max_queries: int,
             if "rate_limited" in msg or "brave_auth" in msg or "brave_connection" in msg:
                 break
         if progress:
-            progress(f"web {i + 1}/{len(queries)}")
+            progress(f"{module} {i + 1}/{len(queries)}")
     if stats["queries_used"] and not stats["results_total"]:
         stats["errors"].append("brave_no_results: Brave hech bir so'rovga natija qaytarmadi")
     items = list(urls.items())[: s.WEB_MAX_PAGES]
-    sources = [src for src in fetch_pages(db, items, fetcher, stats, progress) if src]
+    sources = [src for src in fetch_pages(db, items, fetcher, stats, progress, module, with_vectors) if src]
     if items and not sources:
         codes = sorted({p["status"] for p in stats["pages"]})
         stats["errors"].append(f"pages_failed: hech bir sahifa yuklanmadi ({', '.join(codes)})")
     stats["cost_usd"] = round(stats["queries_used"] * s.BRAVE_PRICE_PER_1000_USD / 1000.0, 4)
     stats["queries"] = [q.text for q in queries[:200]]
     return sources, stats
+
+
+def _on_site(url: str, site: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return host == site or host.endswith("." + site)

@@ -18,6 +18,10 @@ interface HarvestSettings {
   fulltext: boolean;
   core_configured: boolean;
   doc_kinds: string[];
+  local_import?: boolean;
+  max_zip_mb?: number;
+  max_files?: number;
+  ojs_auto_hours?: number;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -94,6 +98,7 @@ function CorpusView() {
       {admin && (
         <div className="grid gap-6 lg:grid-cols-2">
           <UploadPanel kinds={settings?.doc_kinds ?? Object.keys(t.corpus.kinds)} onDone={refreshAll} />
+          <BulkImportPanel kinds={settings?.doc_kinds ?? Object.keys(t.corpus.kinds)} settings={settings} onDone={refreshAll} />
           {settings && <HarvestPanel settings={settings} onStarted={refreshAll} />}
         </div>
       )}
@@ -246,6 +251,81 @@ function UploadPanel({ kinds, onDone }: { kinds: string[]; onDone: () => void })
       )}
       {errors.length > 0 && <ul className="mt-2 max-h-32 overflow-auto text-xs text-red-700">{errors.map((e, i) => <li key={i}>{e}</li>)}</ul>}
       <button className="btn-primary mt-4" disabled={!files.length || sent !== null} onClick={start}>{t.corpus.start}</button>
+    </Card>
+  );
+}
+
+function BulkImportPanel({ kinds, settings, onDone }: { kinds: string[]; settings: HarvestSettings | null; onDone: () => void }) {
+  const zipRef = useRef<HTMLInputElement>(null);
+  const [kind, setKind] = useState("textbook");
+  const [path, setPath] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const report = (r: { job: CorpusJob; errors?: { filename: string; code: string }[] }) => {
+    const errs = r.errors?.length ? ` · ${r.errors.length} ta fayl o'tkazib yuborildi` : "";
+    setMsg({ ok: true, text: `${r.job.total} ta hujjat navbatga qo'yildi${errs}. Jarayon pastdagi "Vazifalar" ro'yxatida.` });
+    onDone();
+  };
+  const fail = (err: unknown) => {
+    const code = err instanceof ApiError ? err.code : "error";
+    setMsg({ ok: false, text: t.corpus.importErrors[code] ?? code });
+  };
+  const uploadZip = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy("zip");
+    setMsg(null);
+    const form = new FormData();
+    form.append("file", f);
+    form.append("doc_kind", kind);
+    try {
+      report(await post("/corpus/upload-zip", form));
+    } catch (err) {
+      fail(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const importFolder = async () => {
+    setBusy("folder");
+    setMsg(null);
+    try {
+      report(await post("/corpus/import-folder", { path, doc_kind: kind }));
+    } catch (err) {
+      fail(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <Card title={t.corpus.bulkTitle} subtitle={t.corpus.bulkHint.replace("{n}", String(settings?.max_files ?? 5000))}>
+      <div className="max-w-xs">
+        <label className="label" htmlFor="bkind">{t.corpus.kind}</label>
+        <select id="bkind" className="input" value={kind} onChange={(e) => setKind(e.target.value)}>
+          {kinds.map((k) => <option key={k} value={k}>{t.corpus.kinds[k] ?? k}</option>)}
+        </select>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 p-3">
+          <p className="text-sm font-medium text-slate-800">{t.corpus.zipTitle}</p>
+          <p className="mb-2 text-xs text-slate-500">{t.corpus.zipHint.replace("{mb}", String(settings?.max_zip_mb ?? 1024))}</p>
+          <button className="btn-secondary" disabled={busy !== null} onClick={() => zipRef.current?.click()}>🗜 {busy === "zip" ? t.corpus.uploading : t.corpus.zipChoose}</button>
+          <input ref={zipRef} type="file" accept=".zip" className="hidden" data-testid="corpus-zip" onChange={(e) => { uploadZip(e.target.files?.[0]); e.target.value = ""; }} />
+        </div>
+        <div className="rounded-lg border border-slate-200 p-3">
+          <p className="text-sm font-medium text-slate-800">{t.corpus.localTitle}</p>
+          {settings?.local_import ? (
+            <>
+              <p className="mb-2 text-xs text-slate-500">{t.corpus.localHint}</p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input className="input" placeholder="C:\Kutubxona\Darsliklar" value={path} onChange={(e) => setPath(e.target.value)} data-testid="corpus-path" />
+                <button className="btn-secondary shrink-0" disabled={busy !== null || !path.trim()} onClick={importFolder}>{busy === "folder" ? "..." : t.corpus.localStart}</button>
+              </div>
+            </>
+          ) : <p className="text-xs text-slate-500">{t.corpus.localOff}</p>}
+        </div>
+      </div>
+      {settings?.ojs_auto_hours ? <p className="mt-3 text-xs text-slate-500">{t.corpus.ojsAuto.replace("{h}", String(settings.ojs_auto_hours))}</p> : null}
+      {msg && <div className="mt-3"><Notice tone={msg.ok ? "info" : "warn"}>{msg.text}</Notice></div>}
     </Card>
   );
 }
