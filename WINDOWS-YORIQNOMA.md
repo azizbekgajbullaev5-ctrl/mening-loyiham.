@@ -24,12 +24,12 @@ python --version
 
 ## 2-qadam. Dasturni yuklab oling
 
-1. GitHub'da PR'ni merge qiling (bir marta): https://github.com/azizbekgajbullaev5-ctrl/mening-loyiham./pull/3 →
-   **"Merge pull request"** → **"Confirm merge"**.
-2. Repozitoriy sahifasini oching: https://github.com/azizbekgajbullaev5-ctrl/mening-loyiham.
-3. Yashil **"Code"** tugmasi → **"Download ZIP"**.
-4. ZIP faylni o'ng tugma bilan bosing → **"Extract All…"** (Hammasini chiqarish).
-5. Chiqarilgan papkani qisqa manzilga ko'chiring, masalan: **`C:\AkademikTahlil`**
+1. Repozitoriy sahifasini oching: https://github.com/azizbekgajbullaev5-ctrl/mening-loyiham.
+2. Yashil **"Code"** tugmasi → **"Download ZIP"**.
+   (Papkada `start.bat` fayli bo'lishi kerak. Bo'lmasa — Windows rejimi hali asosiy branch'ga qo'shilmagan:
+   ochiq Pull Request'ni merge qiling yoki PR sahifasidagi branch'ning ZIP'ini yuklab oling.)
+3. ZIP faylni o'ng tugma bilan bosing → **"Extract All…"** (Hammasini chiqarish).
+4. Chiqarilgan papkani qisqa manzilga ko'chiring, masalan: **`C:\AkademikTahlil`**
    (Desktop yoki OneDrive ichiga qo'ymaslik tavsiya etiladi).
 
 ## 3-qadam. `start.bat` ni ikki marta bosing
