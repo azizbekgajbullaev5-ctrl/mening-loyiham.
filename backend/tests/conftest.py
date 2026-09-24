@@ -8,7 +8,7 @@ _TMP = Path(tempfile.mkdtemp(prefix="aasa-test-"))
 os.environ.update(
     {
         "ENV": "test",
-        "DATABASE_URL": f"sqlite:///{_TMP / 'test.db'}",
+        "DATABASE_URL": os.environ.get("TEST_DATABASE_URL", f"sqlite:///{_TMP / 'test.db'}"),
         "STORAGE_DIR": str(_TMP / "uploads"),
         "TASK_MODE": "inline",
         "SECRET_KEY": "test-secret-key-0123456789",

@@ -56,15 +56,18 @@ def render_pdf(data: dict) -> bytes:
     note = ParagraphStyle("n", parent=body, backColor=LIGHT, borderColor=BLUE, borderWidth=0.6, borderPadding=6, spaceBefore=4, spaceAfter=8)
     big = ParagraphStyle("big", parent=body, fontName=bold, fontSize=20, leading=24, alignment=TA_CENTER, textColor=BLUE)
 
-    def table(rows, widths, header=True):
-        t = Table([[c if isinstance(c, Paragraph) else _p(c, body) for c in row] for row in rows], colWidths=widths, repeatRows=1 if header else 0)
+    cell = ParagraphStyle("c", parent=body, fontSize=8, leading=10)
+
+    def table(rows, widths, header=True, compact=False):
+        st = cell if compact else body
+        t = Table([[c if isinstance(c, Paragraph) else _p(c, st) for c in row] for row in rows], colWidths=widths, repeatRows=1 if header else 0)
         style = [("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")), ("VALIGN", (0, 0), (-1, -1), "TOP")]
         if header:
             style += [("BACKGROUND", (0, 0), (-1, 0), LIGHT)]
         t.setStyle(TableStyle(style))
         return t
 
-    story = [_p(L["title"], h1), Spacer(1, 4), _p(data["disclaimer"], note)]
+    story = [_p(L["title"], h1), Spacer(1, 8), _p(data["disclaimer"], note)]
 
     doc = data["doc"]
     story += [_p(L["s_doc"], h2)]
@@ -82,7 +85,7 @@ def render_pdf(data: dict) -> bytes:
         [_p(L["ai_overall"], body), _p(L["confidence"], body), _p(L["flagged"], body)],
         [_p(ai_val, big), _p(ai.get("confidence_label", "—"), big), _p(f"{ai.get('passages_flagged', 0)} / {ai.get('passages_analyzed', 0)}", big)],
     ], [57 * mm, 57 * mm, 56 * mm]))
-    story.append(_p(ai.get("note", ""), note))
+    story += [Spacer(1, 8), _p(ai.get("note", ""), note)]
     story.append(_p(f"{L['basis']}: {ai.get('basis_text', '')}", small))
     if ai.get("language_note"):
         story.append(_p(ai["language_note"], small))
@@ -100,7 +103,7 @@ def render_pdf(data: dict) -> bytes:
         [L["sim_overall"], fmt_pct(sim.get("overall"))], [L["sim_internal"], fmt_pct(sim.get("internal"))],
         [L["sim_corpus"], fmt_pct(sim.get("corpus")) if sim.get("corpus") is not None else L["not_run"]], [L["sim_external"], ext],
     ], [90 * mm, 80 * mm], header=False))
-    story.append(_p(sim.get("scope_text", ""), note))
+    story += [Spacer(1, 8), _p(sim.get("scope_text", ""), note)]
 
     # chapter chart + table
     story += [_p(L["s_chapters"], h2)]
@@ -114,7 +117,7 @@ def render_pdf(data: dict) -> bytes:
             indent + (s["title"] or s["kind_label"])[:90], f"{s['page_start'] or '—'}–{s['page_end'] or '—'}", str(s["word_count"]),
             L["excluded"] if s["excluded_from_ai"] else fmt_pct(s["ai_likelihood"]), s["ai_confidence_label"] or "—", fmt_pct(s["similarity"]),
         ])
-    story.append(table(rows, [66 * mm, 18 * mm, 18 * mm, 24 * mm, 20 * mm, 24 * mm]))
+    story.append(table(rows, [64 * mm, 18 * mm, 18 * mm, 26 * mm, 20 * mm, 24 * mm], compact=True))
 
     story += [PageBreak(), _p(L["s_passages"], h2)]
     if not data["passages"]:
@@ -160,7 +163,7 @@ def render_pdf(data: dict) -> bytes:
 
     story += [_p(L["s_method"], h2)] + [_p(x, body) for x in data["methodology"]]
     story += [_p(L["s_limits"], h2)] + [_p("• " + x, body) for x in data["limitations"]]
-    story += [_p(L["s_disclaimer"], h2), _p(data["disclaimer"], note)]
+    story += [_p(L["s_disclaimer"], h2), Spacer(1, 6), _p(data["disclaimer"], note)]
 
     buf = io.BytesIO()
 
@@ -190,6 +193,9 @@ def _bar_chart(sections: list[dict], font: str, title: str) -> Drawing:
     ch.categoryAxis.labels.angle = 20
     ch.categoryAxis.labels.dy = -6
     ch.bars[0].fillColor = BLUE
+    ch.bars[0].strokeColor = None
+    ch.barSpacing = 2
+    ch.groupSpacing = 18
     dw.add(ch)
     dw.add(String(12 * mm, 57 * mm, title, fontName=font, fontSize=8.5, fillColor=GREY))
     return dw

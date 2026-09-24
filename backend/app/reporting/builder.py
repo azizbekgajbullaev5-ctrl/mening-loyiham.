@@ -130,7 +130,7 @@ def build_report_data(a: Analysis, lang: str = "uz", max_passages: int = 60, max
         "depth": t(f"depth.{a.depth}", lang),
         "analysis_date": (a.finished_at or a.created_at),
         "report_date": datetime.now(UTC),
-        "sections": [section_out(s, lang) for s in a.sections if s.kind != "front_matter" or s.word_count > 0],
+        "sections": [section_out(s, lang) for s in a.sections if s.kind != "title" and (s.kind != "front_matter" or s.word_count > 0)],
         "passages": [passage_out(p, sections, lang) for p in sorted(passages, key=lambda p: p.paragraph_index)],
         "matches": [match_out(m, sections, lang) for m in matches],
         "methodology": METHODOLOGY[lang],

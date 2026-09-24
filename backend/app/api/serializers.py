@@ -94,7 +94,7 @@ def section_out(s: SectionResult, lang: str = "uz") -> dict:
 
 
 def passage_out(p: PassageAnalysis, sections: dict[int, SectionResult], lang: str = "uz") -> dict:
-    items, explanation = explain_characteristics(p.characteristics or [], lang)
+    items, explanation = explain_characteristics(p.characteristics or [], lang, p.confidence)
     sec = sections.get(p.section_order) if p.section_order is not None else None
     ch = sections.get(p.chapter_order) if p.chapter_order is not None else None
     return {

@@ -52,7 +52,10 @@ T: dict[str, dict[str, str]] = {
         "exp.paragraph_uniformity": "Bo'limdagi paragraflar uzunligi deyarli bir xil.",
         "exp.style_shift": "Parcha uslubi hujjatning o'z me'yoridan sezilarli farq qiladi.",
         "exp.none": "Hech bir signal alohida kuchli emas; baho bir nechta kuchsiz signallar yig'indisidan iborat.",
-        "exp.prefix": "Ushbu parchada quyidagi AI-ga xos xususiyatlar kuzatildi. Bu mualliflik haqida xulosa emas.",
+        "exp.prefix": "Ushbu parchada yuqoridagi AI-ga xos xususiyatlar kuzatildi. Bu mualliflik haqida xulosa emas.",
+        "exp.conf.low": "Ishonchlilik past: parcha qisqa yoki signallar bir-biriga to'liq mos kelmaydi.",
+        "exp.conf.medium": "Ishonchlilik o'rta: bir nechta mustaqil signal bir yo'nalishni ko'rsatadi, ammo bu isbot emas.",
+        "exp.conf.high": "Ishonchlilik yuqori: ko'plab signallar mos keladi, ammo bu ham mualliflikning isboti emas.",
         # section kinds
         "kind.title": "Sarlavha", "kind.toc": "Mundarija", "kind.abstract": "Annotatsiya", "kind.keywords": "Kalit so'zlar",
         "kind.introduction": "Kirish", "kind.literature_review": "Adabiyotlar tahlili", "kind.methodology": "Metodologiya",
@@ -129,7 +132,10 @@ T: dict[str, dict[str, str]] = {
         "exp.paragraph_uniformity": "Paragraphs in this section have nearly identical lengths.",
         "exp.style_shift": "The passage's style departs markedly from the document's own norm.",
         "exp.none": "No single signal is strong; the estimate combines several weak signals.",
-        "exp.prefix": "The following AI-like characteristics were observed. This is not a conclusion about authorship.",
+        "exp.prefix": "The AI-like characteristics listed above were observed. This is not a conclusion about authorship.",
+        "exp.conf.low": "Low confidence: the passage is short or the signals do not fully agree.",
+        "exp.conf.medium": "Medium confidence: several independent signals point the same way, but this is not proof.",
+        "exp.conf.high": "High confidence: many signals agree, but this is still not proof of authorship.",
         "kind.title": "Title", "kind.toc": "Contents", "kind.abstract": "Abstract", "kind.keywords": "Keywords",
         "kind.introduction": "Introduction", "kind.literature_review": "Literature review", "kind.methodology": "Methodology",
         "kind.results": "Results", "kind.discussion": "Discussion", "kind.conclusion": "Conclusion",
@@ -186,15 +192,16 @@ def t(key: str, lang: str = "uz", **params) -> str:
         return text
 
 
-def explain_characteristics(chars: list[dict], lang: str = "uz") -> tuple[list[dict], str]:
+def explain_characteristics(chars: list[dict], lang: str = "uz", confidence: str | None = None) -> tuple[list[dict], str]:
     items = []
     for c in chars:
         code = c["code"]
         v = c.get("value", 0.0)
         items.append({"code": code, "label": t(f"char.{code}", lang), "detail": t(f"exp.{code}", lang, value=round(v, 2), pct=round(v * 100))})
+    conf = (" " + t(f"exp.conf.{confidence}", lang)) if confidence else ""
     if not items:
-        return [], t("exp.none", lang)
-    return items, t("exp.prefix", lang) + " " + " ".join(i["detail"] for i in items)
+        return [], t("exp.none", lang) + conf
+    return items, t("exp.prefix", lang) + conf
 
 
 def issue_text(issue: dict, lang: str = "uz") -> str:
