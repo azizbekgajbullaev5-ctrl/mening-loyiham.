@@ -1,6 +1,9 @@
 """Response shaping. Adds localized labels/explanations to stored codes."""
 from __future__ import annotations
 
+from sqlalchemy import func, select
+from sqlalchemy.orm import object_session
+
 from app.core.i18n import DISCLAIMER, ESTIMATE_NOTE, explain_characteristics, issue_text, t
 from app.models import Analysis, Document, PassageAnalysis, SectionResult, SimilarityMatch
 
@@ -28,10 +31,27 @@ def document_out(d: Document) -> dict:
     }
 
 
+def queue_position(a: Analysis) -> int | None:
+    """1-based position among analyses waiting for the (single) worker."""
+    if a.status != "queued":
+        return None
+    db = object_session(a)
+    if db is None:
+        return None
+    ahead = db.scalar(
+        select(func.count()).select_from(Analysis).where(
+            Analysis.status.in_(("queued", "running")), Analysis.created_at < a.created_at
+        )
+    )
+    return int(ahead or 0) + 1
+
+
 def analysis_summary(a: Analysis) -> dict:
     r = a.result
     v = a.version
     return {
+        "queue_position": queue_position(a),
+        "attempts": a.attempts,
         "id": a.id, "document_id": a.document_id, "document_name": a.document.original_filename if a.document else None,
         "doc_type": a.document.doc_type if a.document else None,
         "depth": a.depth, "status": a.status, "progress": a.progress, "stage": a.stage, "message": a.message, "error": a.error,

@@ -41,12 +41,13 @@ const statusCls: Record<string, string> = {
   failed: "bg-red-50 text-red-700",
 };
 
-export function StatusBadge({ status, progress }: { status: string; progress?: number }) {
+export function StatusBadge({ status, progress, queue }: { status: string; progress?: number; queue?: number | null }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${statusCls[status] ?? ""}`}>
       {status === "running" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" aria-hidden />}
       {t.status[status] ?? status}
       {status === "running" && progress !== undefined ? ` ${progress}%` : ""}
+      {status === "queued" && queue ? ` (${queue})` : ""}
     </span>
   );
 }

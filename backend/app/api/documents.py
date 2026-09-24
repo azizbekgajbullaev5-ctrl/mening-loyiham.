@@ -17,7 +17,7 @@ from app.document_processing.structure import SECTION_KINDS
 from app.document_processing.types import ExtractionError
 from app.document_processing.validation import ValidationError, validate_upload
 from app.models import Analysis, Document, DocumentFingerprint, DocumentVersion, User
-from app.services import storage
+from app.services import checkpoints, storage
 from app.services.audit import audit
 from app.services.pipeline import prepare
 from app.tasks.queue import enqueue_analysis
@@ -116,6 +116,7 @@ def delete_document(document_id: str, request: Request, user: User = Depends(get
     """Permanently delete the file, its fingerprints and every analysis/report."""
     d = owned_document(db, user, document_id)
     storage.delete(d.storage_key)
+    checkpoints.delete_document(d.id)
     db.execute(delete(DocumentFingerprint).where(DocumentFingerprint.document_id == d.id))
     audit(db, "document_deleted", user.id, "document", d.id, client_ip(request))
     db.delete(d)
@@ -128,6 +129,7 @@ def delete_document_file(document_id: str, request: Request, user: User = Depend
     """Delete only the stored original file; analysis results are kept."""
     d = owned_document(db, user, document_id)
     storage.delete(d.storage_key)
+    checkpoints.delete_document(d.id)
     d.storage_key, d.file_deleted_at = None, datetime.now(UTC)
     audit(db, "document_file_deleted", user.id, "document", d.id, client_ip(request))
     db.commit()
@@ -140,7 +142,8 @@ def _load_prepared(d: Document):
     version = d.versions[-1] if d.versions else None
     manual = version.structure if version and version.structure_source == "manual" else None
     try:
-        return prepare(d.file_type, storage.load(d.storage_key), manual)
+        # the extraction checkpoint makes re-opening large documents fast
+        return prepare(d.file_type, storage.load(d.storage_key), manual, checkpoint=(d.id, d.sha256))
     except ExtractionError as exc:
         raise HTTPException(422, exc.code) from exc
 

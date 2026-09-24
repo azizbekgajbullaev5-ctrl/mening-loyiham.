@@ -10,7 +10,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY backend/requirements.txt .
+COPY backend/requirements.txt backend/requirements-core.txt ./
 RUN pip install -r requirements.txt
 
 COPY backend/ .

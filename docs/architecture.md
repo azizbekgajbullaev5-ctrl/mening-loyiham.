@@ -12,6 +12,10 @@ Browser ──► Next.js (frontend, :3000) ──/api/* proxy──► FastAPI 
 * The browser only talks to the Next.js origin; `/api/*` is rewritten server-side to the backend. Sessions
   use an httpOnly, SameSite=Lax cookie (Bearer tokens are also accepted for API clients).
 * Uploads are validated, encrypted at rest and stored under random names outside any web root.
+* **Local mode** (`run_local.py` / `start.bat`): one Python process serves the API *and* the statically exported
+  UI from `backend/webui`, uses SQLite (WAL) and an in-process worker with one analysis at a time.
+* Text extraction and OCR pages are checkpointed (`app/services/checkpoints.py`, Fernet-encrypted, keyed by
+  document id + file hash) so failed or interrupted analyses resume instead of starting over.
 * Analysis runs in background jobs (`TASK_MODE=rq` in production, in-process threads in development,
   synchronous in tests) and writes progress (`progress`, `stage`, `message`) to the `analyses` row, which the
   UI polls.

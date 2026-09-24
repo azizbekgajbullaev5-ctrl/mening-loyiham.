@@ -44,7 +44,7 @@ from app.models import (
 )
 from app.providers import registry
 from app.providers.base import PassageInput
-from app.services import storage
+from app.services import checkpoints, storage
 
 log = logging.getLogger(__name__)
 CONF = ai.CONFIDENCE_ORDER
@@ -82,8 +82,45 @@ class Prepared:
     sections: list[Section]
 
 
-def prepare(file_type: str, data: bytes, manual_structure: list[dict] | None = None, progress=None) -> Prepared:
-    doc = extract(file_type, data, (lambda f, s: progress(5 + 20 * f, "extracting", s)) if progress else None)
+def prepare(
+    file_type: str,
+    data: bytes | None,
+    manual_structure: list[dict] | None = None,
+    progress=None,
+    checkpoint: tuple[str, str] | None = None,
+) -> Prepared:
+    """Extract + detect language/structure.
+
+    ``checkpoint`` = (document_id, sha256): reuse a saved extraction (and saved
+    OCR pages) so an interrupted analysis resumes instead of starting over.
+    """
+    doc = checkpoints.restore_extracted(checkpoints.load(*checkpoint, "extract")) if checkpoint else None
+    if doc is not None:
+        if progress:
+            progress(25, "extracting", "checkpoint", force=True)
+    else:
+        if data is None:
+            raise ExtractionError("file_unavailable", "The original file is not available")
+        ocr_cache: dict[str, str] = (checkpoints.load(*checkpoint, "ocr") or {}) if checkpoint else {}
+        pending: list[int] = []
+
+        def on_ocr_page(pno: int, text: str) -> None:
+            ocr_cache[str(pno)] = text
+            pending.append(pno)
+            if checkpoint and len(pending) >= 5:  # persist every few pages
+                checkpoints.save(*checkpoint, "ocr", ocr_cache)
+                pending.clear()
+
+        try:
+            doc = extract(
+                file_type, data, (lambda f, s: progress(_extract_pct(f, s), "extracting", s)) if progress else None,
+                ocr_cache=ocr_cache, on_ocr_page=on_ocr_page,
+            )
+        finally:
+            if checkpoint and pending:
+                checkpoints.save(*checkpoint, "ocr", ocr_cache)
+        if checkpoint:
+            checkpoints.save(*checkpoint, "extract", checkpoints.dump_extracted(doc))
     paras = [b.text for b in doc.blocks if b.kind != "table"]
     language, lconf, dist = registry.language_provider().detect(paras)
     if progress:
@@ -94,6 +131,11 @@ def prepare(file_type: str, data: bytes, manual_structure: list[dict] | None = N
         headings = detect_headings(doc.blocks, language)
     sections = build_sections(headings, len(doc.blocks))
     return Prepared(doc, language, lconf, dist, headings, sections)
+
+
+def _extract_pct(fraction: float, message: str) -> float:
+    # OCR of scanned books dominates the run time, so it gets a larger share of the bar
+    return 5 + 55 * fraction if message.startswith("OCR") else 5 + 20 * fraction
 
 
 def run_analysis(analysis_id: str) -> None:
@@ -119,6 +161,7 @@ def run_analysis(analysis_id: str) -> None:
             doc = db.get(Document, a.document_id)
             if get_settings().DELETE_FILES_AFTER_ANALYSIS and doc and doc.storage_key:
                 storage.delete(doc.storage_key)
+                checkpoints.delete_document(doc.id)
                 doc.storage_key, doc.file_deleted_at = None, datetime.now(UTC)
                 db.commit()
     except ExtractionError as exc:
@@ -127,6 +170,23 @@ def run_analysis(analysis_id: str) -> None:
         log.error("analysis %s failed: %s\n%s", analysis_id, exc, traceback.format_exc())
         _fail(analysis_id, f"internal_error: {exc.__class__.__name__}")
         raise
+
+
+def mark_retrying(analysis_id: str, attempt: int) -> None:
+    with SessionLocal() as db:
+        a = db.get(Analysis, analysis_id)
+        if a and a.status == "failed" and not (a.error or "").startswith(PERMANENT_ERRORS):
+            a.status, a.stage, a.message = "queued", "queued", f"retry {attempt}"
+            db.commit()
+
+
+def reset_for_resume(db: Session, a: Analysis) -> None:
+    """Put a failed/interrupted analysis back in the queue; checkpoints make it resume."""
+    a.status, a.stage, a.message, a.error, a.finished_at = "queued", "queued", "resume", None, None
+
+
+# extraction errors that a retry cannot fix
+PERMANENT_ERRORS = ("unsupported_type", "parse_error", "encrypted", "no_text", "scanned_no_ocr", "file_unavailable")
 
 
 def _fail(analysis_id: str, error: str) -> None:
@@ -147,9 +207,11 @@ def _run(db: Session, analysis_id: str, progress: Progress) -> None:
         raise ExtractionError("file_unavailable", "The original file has been deleted; re-upload to analyse again")
 
     progress(3, "extracting", doc.original_filename, force=True)
-    data = storage.load(doc.storage_key)
+    ckpt = (doc.id, doc.sha256)
     manual = version.structure if (version and version.structure_source == "manual") else None
-    prep = prepare(doc.file_type, data, manual, progress)
+    has_ckpt = checkpoints.load(*ckpt, "extract") is not None
+    data = None if has_ckpt else storage.load(doc.storage_key)
+    prep = prepare(doc.file_type, data, manual, progress, checkpoint=ckpt)
     del data
     profile = get_profile(prep.language)
     blocks = prep.doc.blocks

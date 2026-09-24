@@ -8,6 +8,8 @@ export interface User {
 
 export interface AnalysisSummary {
   id: string;
+  queue_position: number | null;
+  attempts: number;
   document_id: string;
   document_name: string | null;
   doc_type: string | null;

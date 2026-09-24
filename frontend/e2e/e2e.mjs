@@ -22,7 +22,7 @@ page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 
 // 1. unauthenticated -> redirected to login
 await page.goto(base + "/");
-await page.waitForURL("**/login");
+await page.waitForURL("**/login**");
 log("redirected to login");
 
 // 2. register
@@ -31,7 +31,7 @@ await page.fill("#name", "E2E Tadqiqotchi");
 await page.fill("#email", `e2e${Date.now()}@example.org`);
 await page.fill("#password", "Kuchli-parol-2026");
 await page.click("button[type=submit]");
-await page.waitForURL(base + "/");
+await page.waitForURL((u) => new URL(u).pathname === "/");
 await page.getByText("So'nggi tahlillar").waitFor();
 log("registered + dashboard");
 await page.screenshot({ path: `${SP}/shots/1-dashboard.png`, fullPage: true });
@@ -96,7 +96,7 @@ await page.click("text=Tuzilmani tuzatish");
 await page.getByText("Hujjat tuzilmasini tuzatish").waitFor();
 await page.screenshot({ path: `${SP}/shots/9-structure.png`, fullPage: false });
 await page.click("text=Saqlash va qayta tahlil qilish");
-await page.waitForURL("**/analyses/**");
+await page.waitForURL("**/analysis/**");
 await page.getByTestId("ai-score").waitFor({ timeout: 120000 });
 if (!(await page.textContent("body")).includes("tuzilma qo'lda tuzatilgan")) throw new Error("manual structure flag missing");
 log("structure correction re-analysis completed");

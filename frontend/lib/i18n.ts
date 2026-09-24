@@ -90,6 +90,15 @@ const uz = {
     completed: "Tayyor",
     failed: "Xatolik",
   } as Record<string, string>,
+  errors: {
+    unsupported_type: "Fayl turi qo'llab-quvvatlanmaydi",
+    parse_error: "Faylni o'qib bo'lmadi (fayl buzilgan bo'lishi mumkin)",
+    encrypted: "PDF parol bilan himoyalangan",
+    no_text: "Hujjatda matn topilmadi",
+    scanned_no_ocr: "Skanerlangan PDF: OCR (Tesseract) o'rnatilmagan",
+    file_unavailable: "Asl fayl o'chirilgan",
+    internal_error: "Kutilmagan xatolik",
+  } as Record<string, string>,
   languages: { uz: "O'zbek", ru: "Rus", en: "Ingliz", unknown: "Aniqlanmadi" } as Record<string, string>,
   confidence: { low: "Past", medium: "O'rta", high: "Yuqori" } as Record<string, string>,
   result: {
@@ -132,6 +141,12 @@ const uz = {
     reanalyze: "Qayta tahlil",
     editStructure: "Tuzilmani tuzatish",
     failed: "Tahlil muvaffaqiyatsiz tugadi",
+    resume: "To'xtagan joyidan davom ettirish",
+    resumeHint: "Allaqachon bajarilgan ish (matn ajratish, OCR qilingan sahifalar) saqlangan — tahlil shu joydan davom etadi.",
+    queuePosition: "Navbatdagi o'rni",
+    queueHint: "Kompyuter xotirasini tejash uchun hujjatlar birma-bir tahlil qilinadi.",
+    retrying: "Xatolikdan keyin avtomatik qayta urinish",
+    resumedFromCheckpoint: "saqlangan joydan davom etildi",
   },
   chapters: {
     section: "Bo'lim",

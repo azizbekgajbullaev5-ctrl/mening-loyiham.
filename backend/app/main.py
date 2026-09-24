@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api import analyses, auth, documents, system
 from app.core.config import get_settings
@@ -54,11 +56,21 @@ def create_app() -> FastAPI:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
-        response.headers.setdefault("Cache-Control", "no-store")
+        if request.url.path.startswith("/_next/static/"):
+            response.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
+        else:
+            response.headers.setdefault("Cache-Control", "no-store")
         return response
 
     for r in (auth.router, documents.router, analyses.router, system.router):
         app.include_router(r, prefix=s.API_PREFIX)
+
+    # Bundled web UI (static export of the Next.js frontend). Lets the app run from a
+    # single Python process — used by the Windows launcher (start.bat). API routes above
+    # take precedence; everything else is served from the export.
+    webui = Path(s.WEBUI_DIR)
+    if (webui / "index.html").exists():
+        app.mount("/", StaticFiles(directory=webui, html=True), name="webui")
     return app
 
 

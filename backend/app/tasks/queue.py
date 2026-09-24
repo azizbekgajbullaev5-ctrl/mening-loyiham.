@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from app.core.config import get_settings
@@ -19,12 +20,24 @@ _lock = threading.Lock()
 
 
 def _run_safely(analysis_id: str) -> None:
-    from app.services.pipeline import run_analysis
+    """Run one analysis; on an unexpected error retry automatically.
 
-    try:
-        run_analysis(analysis_id)
-    except Exception:  # noqa: BLE001 — already recorded on the analysis row
-        log.exception("analysis %s failed", analysis_id)
+    Retries resume from the saved extraction/OCR checkpoints, so work already
+    done on a large document is not repeated. Permanent problems (unreadable
+    file, no text) are not retried.
+    """
+    from app.services.pipeline import mark_retrying, run_analysis
+
+    attempts = get_settings().AUTO_RETRY_ATTEMPTS
+    for attempt in range(attempts + 1):
+        try:
+            run_analysis(analysis_id)
+            return
+        except Exception:  # noqa: BLE001 — already recorded on the analysis row
+            log.exception("analysis %s failed (attempt %d)", analysis_id, attempt + 1)
+            if attempt < attempts:
+                time.sleep(3)
+                mark_retrying(analysis_id, attempt + 1)
 
 
 def enqueue_analysis(analysis_id: str) -> None:
@@ -45,7 +58,8 @@ def enqueue_analysis(analysis_id: str) -> None:
         global _executor
         with _lock:
             if _executor is None:
-                _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="analysis")
+                # default 1: large documents are processed one at a time, the rest wait in the queue
+                _executor = ThreadPoolExecutor(max_workers=max(1, s.MAX_CONCURRENT_ANALYSES), thread_name_prefix="analysis")
         _executor.submit(_run_safely, analysis_id)
     else:
         _run_safely(analysis_id)
