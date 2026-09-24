@@ -291,7 +291,7 @@ def _mock_http(monkeypatch, handler):
 def _pdf_bytes(text: str) -> bytes:
     pdf = pymupdf.open()
     page = pdf.new_page()
-    from scripts.make_samples import font_path
+    from tests.fixtures.documents import font_path
 
     fp = font_path()
     if fp:
@@ -306,7 +306,7 @@ def test_harvest_openalex_crossref_core_ojs_cyberleninka(admin, monkeypatch):
     inv = {}
     for i, w in enumerate(en[0].split()):
         inv.setdefault(w, []).append(i)
-    oai = f"""<?xml version="1.0"?><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><ListRecords><record><header><identifier>oai:j:1</identifier></header>
+    oai = """<?xml version="1.0"?><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><ListRecords><record><header><identifier>oai:j:1</identifier></header>
       <metadata><oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:dc="http://purl.org/dc/elements/1.1/">
       <dc:title>Mustaqil ta'lim</dc:title><dc:creator>Karimov A.</dc:creator><dc:date>2023-01-01</dc:date>
       <dc:description>Qisqa annotatsiya.</dc:description><dc:identifier>https://jurnal.uz/index.php/j/article/view/12</dc:identifier>

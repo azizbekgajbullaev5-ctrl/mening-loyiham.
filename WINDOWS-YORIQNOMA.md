@@ -26,8 +26,8 @@ python --version
 
 1. Repozitoriy sahifasini oching: https://github.com/azizbekgajbullaev5-ctrl/mening-loyiham.
 2. Yashil **"Code"** tugmasi → **"Download ZIP"**.
-   (Papkada `start.bat` fayli bo'lishi kerak. Bo'lmasa — Windows rejimi hali asosiy branch'ga qo'shilmagan:
-   ochiq Pull Request'ni merge qiling yoki PR sahifasidagi branch'ning ZIP'ini yuklab oling.)
+   (Papkada `start.bat` fayli bo'lishi kerak. ZIP'da faqat ishga tushirish uchun kerakli fayllar bor —
+   testlar, Docker va frontend manba kodi unga kirmaydi.)
 3. ZIP faylni o'ng tugma bilan bosing → **"Extract All…"** (Hammasini chiqarish).
 4. Chiqarilgan papkani qisqa manzilga ko'chiring, masalan: **`C:\AkademikTahlil`**
    (Desktop yoki OneDrive ichiga qo'ymaslik tavsiya etiladi).
@@ -207,6 +207,7 @@ Hujjatni ilovada **"O'chirish"** tugmasi bilan o'chirsangiz, fayl va barcha nati
 | "Skanerlangan PDF: OCR (Tesseract) o'rnatilmagan" | 5-qadam (Tesseract) ni bajaring. |
 | "PDF parol bilan himoyalangan" | Parolni olib tashlab qayta yuklang. |
 | Tahlil xato bilan to'xtadi | Natija sahifasida **"To'xtagan joyidan davom ettirish"** ni bosing. Takrorlansa, qora oynadagi xabarni nusxalab yuboring. |
+| Windows Defender ZIP'ni "virus" deb bloklaydi | Defender → **Himoya tarixi** (Protection history) da tahdid nomi va fayl yo'lini ko'ring va bizga yuboring. Dasturda zararli fayl yo'q; bu odatda noto'g'ri signal (false positive). Faylni https://www.microsoft.com/wdsi/filesubmission orqali Microsoft'ga "noto'g'ri aniqlash" sifatida yuborish mumkin. |
 | Butunlay qaytadan o'rnatish kerak | `backend\.venv` papkasini o'chirib, `start.bat` ni qayta ishga tushiring (`backend\.env` va `backend\data` ga tegmang). |
 
 ---

@@ -1,6 +1,9 @@
 """Generate synthetic sample documents (uz / ru / en) as DOCX, PDF, TXT, plus a scanned PDF.
 
-    python scripts/make_samples.py [output_dir]
+    python -m tests.fixtures.documents <output_dir>     (run from backend/)
+
+Used by the test suite (in memory) and by the browser e2e test (into a temporary folder).
+Generated files are never stored in the repository.
 
 All content comes from tests/fixtures/sample_texts.py and is synthetic.
 """
@@ -10,7 +13,7 @@ import io
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from tests.fixtures.sample_texts import SAMPLES, dissertation_outline  # noqa: E402
@@ -119,4 +122,6 @@ def main(out_dir: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "tests" / "fixtures" / "samples")
+    if len(sys.argv) != 2:
+        sys.exit("usage: python -m tests.fixtures.documents <output_dir>")
+    main(Path(sys.argv[1]))

@@ -30,10 +30,8 @@ from app.core.database import Base, engine  # noqa: E402
 from app.core.security import login_limiter  # noqa: E402
 from app.main import app  # noqa: E402
 from app.providers import registry  # noqa: E402
-from scripts.make_samples import make_docx, make_pdf, make_scanned_pdf, make_txt  # noqa: E402
-
-SAMPLES = Path(__file__).parent / "fixtures" / "samples"
-
+from tests.fixtures.documents import make_docx, make_pdf, make_scanned_pdf, make_txt  # noqa: E402
+from tests.fixtures.hostile import write_hostile_files  # noqa: E402
 
 @pytest.fixture(scope="session", autouse=True)
 def _db():
@@ -82,6 +80,12 @@ def samples() -> dict:
         out[f"{lang}.txt"] = make_txt(lang)
     out["en_scanned.pdf"] = make_scanned_pdf("en")
     return out
+
+
+@pytest.fixture
+def hostile(samples, tmp_path) -> dict:
+    """Rejected-upload samples, written to a temporary folder (never stored in the repository)."""
+    return write_hostile_files(samples["en.docx"], tmp_path / "hostile")
 
 
 def upload(client: TestClient, name: str, data: bytes, depth: str = "standard", doc_type: str = "phd_dissertation", **extra) -> dict:

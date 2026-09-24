@@ -35,8 +35,8 @@ backend/
     reporting/             PDF (ReportLab) and DOCX (python-docx) reports
     tasks/                 queue dispatch, retention cleanup
   alembic/                 migrations
-  scripts/make_samples.py  synthetic uz/ru/en sample documents
-  tests/                   pytest suite (+ fixtures/samples)
+  tests/                   pytest suite; fixtures/documents.py generates synthetic uz/ru/en samples,
+                           fixtures/hostile.py builds rejected-upload inputs in a temp folder
 frontend/                  Next.js 14 + TypeScript + Tailwind + Recharts (Uzbek UI)
 docker/                    Dockerfiles
 docs/                      this documentation

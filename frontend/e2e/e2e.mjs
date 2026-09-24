@@ -1,4 +1,6 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import { chromium } from "playwright";
 /**
  * Browser end-to-end test against a running stack (frontend on :3000 + backend + worker).
@@ -9,7 +11,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SP = process.env.E2E_OUT || path.join(here, "..", "e2e-output");
-const SAMPLES = path.join(here, "..", "..", "backend", "tests", "fixtures", "samples");
+// sample documents are generated into a temporary folder (they are not stored in the repository)
+const SAMPLES = fs.mkdtempSync(path.join(os.tmpdir(), "aasa-samples-"));
+const python = process.env.PYTHON || (process.platform === "win32" ? "python" : "python3");
+const gen = spawnSync(python, ["-m", "tests.fixtures.documents", SAMPLES], { cwd: path.join(here, "..", "..", "backend"), stdio: "inherit" });
+if (gen.status !== 0) throw new Error("could not generate sample documents (set PYTHON to the backend venv's python)");
 const base = process.env.E2E_BASE_URL || "http://localhost:3000";
 fs.mkdirSync(path.join(SP, "shots"), { recursive: true });
 const log = (...a) => console.log("•", ...a);
@@ -121,5 +127,6 @@ log("deleted document; rows", before, "->", await page.locator("table tbody tr")
 
 log("console/page errors:", errors.length ? errors : "none");
 await browser.close();
+fs.rmSync(SAMPLES, { recursive: true, force: true });
 
 if (errors.some((e) => !/401|Failed to fetch RSC/.test(e))) process.exitCode = 1;
