@@ -104,9 +104,12 @@ class Settings(BaseSettings):
     BRAVE_API_URL: str = "https://api.search.brave.com/res/v1/web/search"
     BRAVE_PRICE_PER_1000_USD: float = 5.0  # check your Brave plan; used for the estimate only
     BRAVE_RPS: float = 1.0
-    WEB_MAX_QUERIES: int = 40
-    WEB_WORDS_PER_QUERY: int = 1500
-    WEB_RESULTS_PER_QUERY: int = 3
+    # one query per WEB_WORDS_PER_QUERY words, capped: 30 000 words -> 75 queries (~$0.38 at $5/1000)
+    WEB_MAX_QUERIES: int = 150
+    WEB_WORDS_PER_QUERY: int = 400
+    WEB_RESULTS_PER_QUERY: int = 5
+    WEB_MAX_PAGES: int = 300  # unique pages downloaded per check
+    WEB_FETCH_WORKERS: int = 6
     WEB_MAX_PAGE_MB: int = 5
     WEB_RESPECT_ROBOTS: bool = True
     WEB_PAGE_CACHE_DAYS: int = 30

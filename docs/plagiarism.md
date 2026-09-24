@@ -16,6 +16,14 @@ passage is not "human text".
 | Internet | web pages found with the Brave Search API for the most distinctive sentences | `BRAVE_API_KEY` |
 | Paraphrase | meaning-level matches with corpus chunks (multilingual embeddings) | nothing (model downloaded once, or hash fallback) |
 
+### Earlier copies of the same document
+
+An earlier upload of the same work by the same user is not a source. A document is treated as a copy (left
+out of the own-documents comparison and of the similarity tab, and reported as *"Bu hujjat avval
+yuklangan"*) when it has the same file hash, or (nearly) the same text (≥ 90% of the larger document's
+fingerprints shared), or the same file name (ignoring "(1)", "copy", "nusxa" suffixes) with ≥ 50% shared text.
+A same-named file with different text is still compared and only mentioned in the warning.
+
 ### Reference corpus
 
 * **Bulk upload by folder** — page *Ma'lumotnoma bazasi* (`/corpus/`), admin only. Choose a folder; every
@@ -51,6 +59,14 @@ volume and speed. A failing source is logged in the job and does not stop the ot
   `price = queries × BRAVE_PRICE_PER_1000_USD / 1000`. The user confirms or skips.
 * Queries are the most distinctive sentences (rare words, spread across the document), skipping sentences
   already matched in the corpus and quoted/cited sentences. Only these short fragments leave the computer.
+  Defaults: one query per 400 words (`WEB_WORDS_PER_QUERY`), at most `WEB_MAX_QUERIES=150`, 5 results per
+  query, at most `WEB_MAX_PAGES=300` pages downloaded by `WEB_FETCH_WORKERS=6` parallel workers.
+* Queries are **plain** (up to 18 words, unquoted). Earlier versions sent a quoted 12-word exact phrase, which
+  almost never matched Uzbek pages (apostrophe variants oʻ/o‘/o', word forms), so Brave returned nothing.
+  Whether a page really matches is decided by shingle comparison, not by the search engine.
+* Every run records what happened: per query the number of results, per page the status (`ok`, `timeout`,
+  `http_403`, `robots_disallow`, …) and whether it became a source. The result page and the PDF list the
+  checked URLs. Failed pages are retried after 24 hours; successful ones are cached for `WEB_PAGE_CACHE_DAYS`.
 * Found pages are downloaded with an SSRF guard (public IPs only, ports 80/443, re-checked on every
   redirect), `robots.txt` is respected (`WEB_RESPECT_ROBOTS`), size is limited (`WEB_MAX_PAGE_MB`). Only
   page fingerprints are cached (`WEB_PAGE_CACHE_DAYS`), not the page text.

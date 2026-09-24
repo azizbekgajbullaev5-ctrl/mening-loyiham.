@@ -4,7 +4,7 @@ import { get } from "@/lib/api";
 import { num } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import { CITATION_COLOR, RESULT_COLORS, colorFor } from "@/lib/sourceColors";
-import type { ContentParagraph, Plagiarism } from "@/lib/types";
+import type { ContentParagraph, DuplicateDoc, Plagiarism, WebStats } from "@/lib/types";
 import { Card, Notice, Spinner } from "./ui";
 
 function ResultTiles({ p }: { p: Plagiarism }) {
@@ -68,13 +68,14 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
   const modNames = [
     mods.corpus && `${t.corpus.title} (${mods.corpus_documents ?? 0})`,
     mods.own && t.plag.ownDocs,
-    mods.web && `Internet (Brave): ${mods.web_stats?.queries_used ?? 0} so'rov, ${mods.web_stats?.fetched_pages ?? 0}+${mods.web_stats?.cached_pages ?? 0} sahifa, ≈$${mods.web_stats?.cost_usd ?? 0}`,
+    mods.web && webSummary(mods.web_stats),
     mods.paraphrase && typeof mods.paraphrase === "object" && `Parafraz: ${mods.paraphrase.backend}`,
   ].filter(Boolean);
   const excl = Object.entries(p.exclusions).filter(([, v]) => v > 0);
 
   return (
     <div className="space-y-6">
+      {mods.duplicates?.length ? <Duplicates items={mods.duplicates} /> : null}
       <Card title={t.plag.tab} subtitle={t.plag.defs}>
         <ResultTiles p={p} />
         <dl className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
@@ -88,7 +89,7 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
         {!mods.web && <p className="mt-3 text-xs text-amber-700">{t.plag.scopeLocal}</p>}
         {mods.web && (mods.web_stats?.errors?.length ?? 0) > 0 && (
           <Notice tone="warn">
-            Internet tekshiruvida xatolar bo&apos;ldi — natija to&apos;liq bo&apos;lmasligi mumkin: {mods.web_stats!.errors.slice(0, 3).join("; ")}
+            Internet tekshiruvi to&apos;liq bo&apos;lmadi: {[...new Set(mods.web_stats!.errors.map(webError))].slice(0, 4).join(" ")}
           </Notice>
         )}
         <a className="btn-primary mt-4" href={`/api/analyses/${analysisId}/report?kind=plagiarism`}>{t.plag.report}</a>
@@ -130,6 +131,8 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
         )}
       </Card>
 
+      {mods.web && mods.web_stats && <WebPages stats={mods.web_stats} numbers={srcNumber} />}
+
       <Card title={t.plag.tricks}>
         {p.integrity.items.length === 0 ? <p className="text-sm text-slate-500">{t.plag.noTricks}</p> : (
           <ul className="space-y-2">
@@ -160,6 +163,99 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
           )}
       </Card>
     </div>
+  );
+}
+
+function webSummary(w?: WebStats): string {
+  if (!w) return "Internet (Brave)";
+  const parts = [`${w.queries_used} so'rov`];
+  if (w.results_total !== undefined) parts.push(`${w.results_total} natija`);
+  parts.push(`${w.fetched_pages} yuklandi`, `${w.cached_pages} keshdan`);
+  if (w.failed_pages) parts.push(`${w.failed_pages} yuklanmadi`);
+  return `Internet (Brave): ${parts.join(", ")}, ≈$${w.cost_usd ?? 0}`;
+}
+
+function webError(e: string): string {
+  const code = e.split(/[:\s]/)[0];
+  const key = code.startsWith("brave_auth") ? "brave_auth" : code;
+  return t.plag.webErrors[key] ?? e;
+}
+
+function Duplicates({ items }: { items: DuplicateDoc[] }) {
+  const excluded = items.filter((d) => d.excluded);
+  const nameOnly = items.filter((d) => !d.excluded);
+  const row = (d: DuplicateDoc) => (
+    <li key={d.id}>
+      <b>{d.filename}</b>
+      {d.uploaded_at && <> — {new Date(d.uploaded_at).toLocaleString("uz-UZ")}</>}
+      {" "}({d.reasons.map((r) => t.plag.dupReasons[r] ?? r).join(", ")}
+      {d.overlap != null && `, matn mosligi ${Math.round(d.overlap * 100)}%`})
+    </li>
+  );
+  return (
+    <Notice tone="warn">
+      {excluded.length > 0 && (
+        <div data-testid="dup-warning">
+          <b>{t.plag.dupTitle}.</b> {t.plag.dupExcluded}
+          <ul className="ml-5 mt-1 list-disc">{excluded.map(row)}</ul>
+        </div>
+      )}
+      {nameOnly.length > 0 && (
+        <div className={excluded.length ? "mt-2" : ""}>
+          {t.plag.dupNameOnly}
+          <ul className="ml-5 mt-1 list-disc">{nameOnly.map(row)}</ul>
+        </div>
+      )}
+    </Notice>
+  );
+}
+
+function WebPages({ stats, numbers }: { stats: WebStats; numbers: Map<number, number> }) {
+  const [showQueries, setShowQueries] = useState(false);
+  const pages = [...(stats.pages ?? [])].sort((a, b) => Number(b.source_index != null) - Number(a.source_index != null) || Number(b.status === "ok") - Number(a.status === "ok"));
+  return (
+    <Card title={t.plag.webPages} subtitle={t.plag.webPagesHint} actions={
+      stats.query_log?.length ? <button className="btn-secondary px-3 py-1.5" onClick={() => setShowQueries(!showQueries)}>{t.plag.webQueries} ({stats.query_log.length})</button> : undefined
+    }>
+      {showQueries && stats.query_log && (
+        <ol className="mb-4 ml-5 list-decimal space-y-1 text-xs text-slate-600">
+          {stats.query_log.map((q, i) => (
+            <li key={i}>{q.q} — <span className={q.results ? "text-slate-800" : "text-amber-700"}>{q.results == null ? `xato: ${q.error ?? ""}` : `${q.results} natija`}</span></li>
+          ))}
+        </ol>
+      )}
+      {pages.length === 0 ? <p className="text-sm text-slate-500">{t.plag.webNoPages}</p> : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm" data-testid="web-pages">
+            <thead>
+              <tr><th className="th">Sahifa</th><th className="th">Holat</th><th className="th">Natija</th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {pages.map((pg) => {
+                const n = pg.source_index != null ? numbers.get(pg.source_index) : undefined;
+                return (
+                  <tr key={pg.url}>
+                    <td className="td max-w-md">
+                      <div className="truncate font-medium text-slate-800">{pg.title || pg.url}</div>
+                      <a className="break-all text-xs text-brand-700 underline" href={pg.url} target="_blank" rel="noopener noreferrer nofollow">{pg.url}</a>
+                    </td>
+                    <td className={`td text-xs ${pg.status === "ok" ? "text-slate-700" : "text-amber-700"}`}>
+                      {t.plag.pageStatus[pg.status] ?? (pg.status.startsWith("http_") ? `server javobi ${pg.status.slice(5)}` : pg.status)}
+                      {pg.cached && " (keshdan)"}
+                      {pg.status === "ok" && pg.words > 0 && <span className="text-slate-500"> · {num(pg.words)} so&apos;z</span>}
+                    </td>
+                    <td className="td text-xs">
+                      {n ? <span className="rounded px-1.5 py-0.5 font-semibold text-slate-800" style={{ background: colorFor(pg.source_index!) }}>manba [{n}]</span>
+                        : pg.status === "ok" ? "moslik yo'q" : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   );
 }
 

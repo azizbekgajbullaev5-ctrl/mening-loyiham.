@@ -132,7 +132,8 @@ def ensure_env() -> None:
                 "# Internet check via Brave Search API (https://brave.com/search/api/). Cost is shown before each check.",
                 "BRAVE_API_KEY=",
                 "BRAVE_PRICE_PER_1000_USD=5.0",
-                "WEB_MAX_QUERIES=40",
+                "# One query per 400 words (30 000 words -> 75 queries), at most WEB_MAX_QUERIES",
+                "WEB_MAX_QUERIES=150",
                 "# Harvesting open sources into the reference corpus (comma-separated lists)",
                 "HARVEST_OJS_URLS=",
                 "HARVEST_QUERIES=",
@@ -149,6 +150,23 @@ def ensure_env() -> None:
         ),
         encoding="utf-8",
     )
+
+
+# Defaults written into backend/.env by earlier versions that are now known to be too low.
+# Only an unchanged old default is updated; a value the user edited is left alone.
+ENV_UPGRADES = {"WEB_MAX_QUERIES=40": "WEB_MAX_QUERIES=150"}
+
+
+def upgrade_env() -> None:
+    if not ENV_FILE.exists():
+        return
+    lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
+    changed = [ln for ln in lines if ln.strip() in ENV_UPGRADES]
+    if not changed:
+        return
+    ENV_FILE.write_text("\n".join(ENV_UPGRADES.get(ln.strip(), ln) for ln in lines) + "\n", encoding="utf-8")
+    for ln in changed:
+        say(f"  backend\\.env yangilandi: {ln.strip()} -> {ENV_UPGRADES[ln.strip()]}")
 
 
 def migrate_database() -> None:
@@ -194,6 +212,7 @@ def main() -> None:
     os.chdir(BACKEND)  # settings read backend/.env; relative data paths live in backend/data
     sys.path.insert(0, str(BACKEND))
     ensure_env()
+    upgrade_env()
     say("[3/3] Ma'lumotlar bazasi tayyorlanmoqda...")
     migrate_database()
 

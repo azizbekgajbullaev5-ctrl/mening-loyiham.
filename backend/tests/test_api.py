@@ -171,12 +171,18 @@ def test_cross_document_similarity_is_scoped_to_owner(samples):
         b = upload(bob, "copy.txt", samples["en.txt"])["analysis"]["id"]
         rb = bob.get(f"/api/analyses/{b}").json()["result"]["similarity"]
         assert rb["corpus"] == 0
-        # Alice's second upload matches her own first document
-        a2 = upload(alice, "second.txt", samples["en.txt"])["analysis"]["id"]
+        # an identical re-upload is a copy of the same work, not a source: warned about, not compared
+        again = upload(alice, "again.txt", samples["en.txt"])["analysis"]["id"]
+        assert alice.get(f"/api/analyses/{again}").json()["result"]["similarity"]["corpus"] == 0
+        assert alice.get(f"/api/analyses/{again}/plagiarism").json()["modules"]["duplicates"][0]["reasons"] == ["same_file", "same_text"]
+        # a different document of Alice's that reuses part of the first one matches it
+        paras = samples["en.txt"].decode().split("\n\n")
+        new = "\n\n".join(paras[: len(paras) // 2] + ["An entirely new closing part written for this report only. " * 30])
+        a2 = upload(alice, "second.txt", new.encode())["analysis"]["id"]
         ra = alice.get(f"/api/analyses/{a2}").json()["result"]["similarity"]
-        assert ra["corpus"] > 80
+        assert ra["corpus"] > 30
         cross = [m for m in alice.get(f"/api/analyses/{a2}/similarity").json()["matches"] if m["match_type"] == "cross_document"]
-        assert cross and cross[0]["matched_document_name"] == "first.txt"
+        assert cross and {m["matched_document_name"] for m in cross} <= {"first.txt", "again.txt"}
 
 
 # ---------------------------------------------------------------- deletion

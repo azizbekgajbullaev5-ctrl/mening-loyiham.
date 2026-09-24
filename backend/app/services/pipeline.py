@@ -47,7 +47,7 @@ from app.models import (
 )
 from app.providers import registry
 from app.providers.base import PassageInput
-from app.services import checkpoints, storage
+from app.services import checkpoints, duplicates, storage
 
 log = logging.getLogger(__name__)
 CONF = ai.CONFIDENCE_ORDER
@@ -319,9 +319,13 @@ def _run(db: Session, analysis_id: str, progress: Progress) -> None:
         sim.SimPassage(p.id, p.section_order, p.paragraph_start, p.page, p.text, excluded=sec_by_order[p.section_order].kind in SIMILARITY_EXCLUDED_KINDS)
         for p in passages
     ]
+    # earlier copies of this same document (re-upload, same name + text, same text) are not "sources"
+    own_fps = {h for h, _, _ in sim.fingerprints(sim_passages, profile.stopwords)}
+    copies = duplicates.find_copies(db, doc, own_fps)
+    skip_ids = {c["id"] for c in copies if c["excluded"]}
     corpus_index = None
     if a.depth in ("standard", "deep"):
-        corpus_index = _corpus_index(db, doc)
+        corpus_index = _corpus_index(db, doc, skip_ids)
     outcome = sim.analyze(sim_passages, profile.stopwords, corpus_index, run_paraphrase=a.depth != "quick")
 
     external_cov = None
@@ -360,7 +364,7 @@ def _run(db: Session, analysis_id: str, progress: Progress) -> None:
 
     # ---- plagiarism (reference corpus, own documents, internet, paraphrase)
     progress(80, "plagiarism", "", force=True)
-    _plagiarism(db, a, doc, prep, profile, progress)
+    _plagiarism(db, a, doc, prep, profile, progress, copies)
 
     # ---- style
     progress(86, "style", "", force=True)
@@ -391,15 +395,18 @@ def _run(db: Session, analysis_id: str, progress: Progress) -> None:
     db.commit()
 
 
-def _plagiarism(db: Session, a: Analysis, doc: Document, prep: Prepared, profile, progress) -> None:
+def _plagiarism(db: Session, a: Analysis, doc: Document, prep: Prepared, profile, progress, copies: list[dict] | None = None) -> None:
     from app.plagiarism import integrity, matcher
     from app.plagiarism import web as webcheck
 
     step = lambda msg: progress(82, "plagiarism", msg)  # noqa: E731
+    copies = copies or []
+    skip_ids = {c["id"] for c in copies if c["excluded"]}
     web_sources, web_stats = None, None
     if a.web_check:
         # first pass (no paraphrase) tells which sentences are already found locally: those are not searched online
-        pre, stream = matcher.compare(db, prep.doc.blocks, prep.sections, doc, a.corpus_check, None, step, run_paraphrase=False)
+        pre, stream = matcher.compare(db, prep.doc.blocks, prep.sections, doc, a.corpus_check, None, step,
+                                      run_paraphrase=False, exclude_own=skip_ids)
         covered = np.zeros(len(stream.canon), dtype=bool)
         by_block: dict[int, list[tuple[int, int]]] = defaultdict(list)
         for i, (b, s0) in enumerate(zip(stream.block, stream.start)):
@@ -411,10 +418,15 @@ def _plagiarism(db: Session, a: Analysis, doc: Document, prep: Prepared, profile
         planned = int((a.web_estimate or {}).get("queries") or webcheck.planned_queries(len(stream.canon)))
         web_sources, web_stats = webcheck.run(db, stream, covered, planned, progress=lambda m: progress(84, "web", m),
                                               abbreviations=profile.abbreviations)
-    outcome, _ = matcher.compare(db, prep.doc.blocks, prep.sections, doc, a.corpus_check, web_sources, step)
+    outcome, _ = matcher.compare(db, prep.doc.blocks, prep.sections, doc, a.corpus_check, web_sources, step, exclude_own=skip_ids)
     modules = dict(outcome.modules)
     modules["corpus_documents"] = db.scalar(select(func.count()).select_from(RefDocument)) if a.corpus_check else 0
+    if copies:
+        modules["duplicates"] = copies
     if web_stats is not None:
+        matched = {src["url"]: src["index"] for src in outcome.sources if src["module"] == "web" and src.get("url")}
+        for page in web_stats.get("pages", []):
+            page["source_index"] = matched.get(page["url"])  # set when the page was found as a source
         modules["web"] = True  # the check ran, even if it found nothing or failed (errors are listed)
         modules["web_stats"] = web_stats
     db.execute(delete(PlagiarismResult).where(PlagiarismResult.analysis_id == a.id))
@@ -441,11 +453,13 @@ def _sample(passages: list[Passage], per_section: int) -> list[Passage]:
     return sorted(out, key=lambda p: p.id)
 
 
-def _corpus_index(db: Session, doc: Document) -> dict[int, list[tuple[str, int, int | None]]]:
-    rows = db.execute(
-        select(DocumentFingerprint.hash, DocumentFingerprint.document_id, DocumentFingerprint.paragraph_index, DocumentFingerprint.page)
-        .where(DocumentFingerprint.owner_id == doc.owner_id, DocumentFingerprint.document_id != doc.id)
-    ).all()
+def _corpus_index(db: Session, doc: Document, skip_ids: set[str] = frozenset()) -> dict[int, list[tuple[str, int, int | None]]]:
+    q = select(DocumentFingerprint.hash, DocumentFingerprint.document_id, DocumentFingerprint.paragraph_index, DocumentFingerprint.page).where(
+        DocumentFingerprint.owner_id == doc.owner_id, DocumentFingerprint.document_id != doc.id
+    )
+    if skip_ids:
+        q = q.where(DocumentFingerprint.document_id.not_in(list(skip_ids)))
+    rows = db.execute(q).all()
     idx: dict[int, list[tuple[str, int, int | None]]] = defaultdict(list)
     for h, d, para, page in rows:
         idx[h].append((d, para, page))

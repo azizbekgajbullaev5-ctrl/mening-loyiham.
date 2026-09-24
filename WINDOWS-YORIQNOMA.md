@@ -169,7 +169,7 @@ va manbaga havola (`[3]` yoki `(Karimov, 2020)`) berilgan parcha **iqtibos** his
    ```
    BRAVE_API_KEY=sizning_kalitingiz
    BRAVE_PRICE_PER_1000_USD=5        (tarifingizdagi 1000 so'rov narxi)
-   WEB_MAX_QUERIES=40                (bitta hujjat uchun eng ko'p so'rov)
+   WEB_MAX_QUERIES=150               (bitta hujjat uchun eng ko'p so'rov; har 400 so'zga 1 ta)
    ```
 3. `start.bat` ni qayta ishga tushiring. Kalit faqat kompyuteringizda qoladi, brauzerga yuborilmaydi.
    Internetga faqat eng o'ziga xos qisqa jumlalar yuboriladi, butun matn emas.
@@ -180,6 +180,15 @@ va manbaga havola (`[3]` yoki `(Karimov, 2020)`) berilgan parcha **iqtibos** his
 * Internet bo'lmasa yoki yuklab bo'lmasa, dastur o'zi **oddiy (hash) usulga** o'tadi: ishlaydi, lekin parafrazni
   kuchsizroq topadi. Majburan tanlash: `.env` da `EMBEDDING_BACKEND=hash` yoki `EMBEDDING_BACKEND=model2vec`.
 * Usul o'zgartirilsa, bazadagi hujjatlarni qayta yuklash kerak (vektorlar mos kelishi uchun).
+
+**Avval yuklangan nusxa.** Xuddi shu faylni (yoki shu nomdagi va matni deyarli bir xil faylni) qayta yuklasangiz,
+dastur uni "manba" deb hisoblamaydi: natijada **"Bu hujjat avval yuklangan"** ogohlantirishi chiqadi va eski nusxa
+"Sizning hujjatlaringiz" solishtiruvidan chiqariladi. Nomi bir xil, lekin matni boshqa hujjat (masalan, boshqa
+talabaning `dissertatsiya.docx` fayli) odatdagidek solishtiriladi.
+
+**Internet natijasi.** "Plagiat" bo'limidagi **"Tekshirilgan internet sahifalari"** jadvalida Brave topgan har bir
+sahifa, u yuklandimi (yoki nega yuklanmadi: vaqt tugadi, server 403, robots.txt …) va manba sifatida topildimi ko'rinadi.
+"Yuborilgan so'rovlar" tugmasi har bir so'rov va unga kelgan natijalar sonini ko'rsatadi.
 
 **Muhim:** natija faqat tekshirilgan manbalarga nisbatan (sizning bazangiz, oldingi hujjatlaringiz va
 Brave topgan sahifalar). Past o'zlashtirish foizi matn 100% original ekanini isbotlamaydi. Parafraz chegaralari

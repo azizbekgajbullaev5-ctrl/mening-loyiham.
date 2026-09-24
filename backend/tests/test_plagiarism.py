@@ -244,12 +244,96 @@ def test_web_check_estimate_confirm_and_cache(user_client, monkeypatch):
     assert web_src and web_src[0]["url"] == "https://example.org/article" and web_src[0]["share_text"] > 20
     stats = pl["modules"]["web_stats"]
     assert 0 < stats["queries_used"] <= est["queries"] and stats["fetched_pages"] == 2
-    # second check: pages come from the fingerprint cache
+    assert all(not q.startswith('"') for q in stats["queries"])  # plain queries, not strict exact phrases
+    pages = {p["url"]: p for p in stats["pages"]}
+    assert pages["https://example.org/article"]["status"] == "ok" and pages["https://example.org/article"]["source_index"] is not None
+    assert pages["https://example.org/other"]["source_index"] is None
+    assert stats["query_log"] and stats["results_total"] > 0
+    # second check of the same file: the earlier copy is not a source, so the web is still searched; pages are cached
     FakeFetcher.fetched = []
-    aid2 = upload(user_client, "web2.docx", data, web_check="true", keep_for_similarity="false")["analysis"]["id"]
+    aid2 = upload(user_client, "web2.docx", data, web_check="true")["analysis"]["id"]
     user_client.post(f"/api/analyses/{aid2}/confirm", json={"web_check": True})
     assert FakeFetcher.fetched == []
-    assert user_client.get(f"/api/analyses/{aid2}/plagiarism").json()["modules"]["web_stats"]["cached_pages"] == 2
+    pl2 = user_client.get(f"/api/analyses/{aid2}/plagiarism").json()
+    assert pl2["modules"]["web_stats"]["cached_pages"] == 2
+    assert pl2["modules"]["duplicates"][0]["excluded"] and not [s for s in pl2["sources"] if s["module"] == "own"]
+    pdf = user_client.get(f"/api/analyses/{aid2}/report", params={"kind": "plagiarism"})
+    assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
+    text = "".join(page.get_text() for page in pymupdf.open(stream=pdf.content, filetype="pdf"))
+    assert "https://example.org/article" in text and "avval yuklangan" in text
+
+
+def test_web_check_reports_why_nothing_was_compared(user_client, monkeypatch):
+    class NoResults(FakeBrave):
+        def search(self, q):
+            return []
+
+    monkeypatch.setattr(config.get_settings(), "BRAVE_API_KEY", SecretStr("test-key"))
+    monkeypatch.setattr(web, "BraveClient", NoResults)
+    aid = upload(user_client, "nores.docx", make_docx(UZ["human"]), web_check="true", keep_for_similarity="false")["analysis"]["id"]
+    user_client.post(f"/api/analyses/{aid}/confirm", json={"web_check": True})
+    stats = user_client.get(f"/api/analyses/{aid}/plagiarism").json()["modules"]["web_stats"]
+    assert stats["queries_used"] > 0 and stats["results_total"] == 0 and stats["queries_without_results"] == stats["queries_used"]
+    assert any(e.startswith("brave_no_results") for e in stats["errors"])
+
+
+def test_web_page_failures_are_listed_with_reason(user_client, monkeypatch):
+    class Failing(FakeFetcher):
+        def fetch_bytes(self, url):
+            if url.endswith("article"):
+                raise httpx.ConnectTimeout("slow")
+            request = httpx.Request("GET", url)
+            raise httpx.HTTPStatusError("forbidden", request=request, response=httpx.Response(403, request=request))
+
+    monkeypatch.setattr(config.get_settings(), "BRAVE_API_KEY", SecretStr("test-key"))
+    monkeypatch.setattr(web, "BraveClient", FakeBrave)
+    monkeypatch.setattr(web, "Fetcher", Failing)
+    aid = upload(user_client, "fail.docx", make_docx(UZ["human"]), web_check="true", keep_for_similarity="false")["analysis"]["id"]
+    user_client.post(f"/api/analyses/{aid}/confirm", json={"web_check": True})
+    stats = user_client.get(f"/api/analyses/{aid}/plagiarism").json()["modules"]["web_stats"]
+    assert {p["url"]: p["status"] for p in stats["pages"]} == {"https://example.org/article": "timeout", "https://example.org/other": "http_403"}
+    assert stats["failed_pages"] == 2 and any(e.startswith("pages_failed") for e in stats["errors"])
+
+
+def test_query_count_scales_with_document_size():
+    assert web.planned_queries(29205) == 74  # 1 query per 400 words
+    assert web.planned_queries(200000) == config.get_settings().WEB_MAX_QUERIES
+    assert web.planned_queries(300) == 3
+
+
+# ---------------------------------------------------------------- earlier copies of the same document
+def _own_sources(client, aid):
+    pl = client.get(f"/api/analyses/{aid}/plagiarism").json()
+    return pl, [s for s in pl["sources"] if s["module"] == "own"]
+
+
+def test_reuploaded_document_is_not_its_own_source(user_client):
+    data = make_docx(UZ["human"])
+    upload(user_client, "A.N.Xasanova o'quv qo'llanma.docx", data)
+    aid = upload(user_client, "A.N.Xasanova o'quv qo'llanma.docx", data)["analysis"]["id"]
+    pl, own = _own_sources(user_client, aid)
+    assert not own and pl["originality"] > 95
+    dup = pl["modules"]["duplicates"][0]
+    assert dup["excluded"] and {"same_file", "same_name"} <= set(dup["reasons"])
+    sim = user_client.get(f"/api/analyses/{aid}/similarity", params={"match_type": "cross_document"}).json()
+    assert sim["matches"] == []  # the "O'xshashlik" tab does not compare it with its own copy either
+
+
+def test_same_text_under_another_name_is_a_copy(user_client):
+    upload(user_client, "qollanma_v1.docx", make_docx(UZ["human"]))
+    aid = upload(user_client, "yangi nom.docx", make_docx(UZ["human"] + ["Qo'shimcha kichik jumla."]))["analysis"]["id"]
+    pl, own = _own_sources(user_client, aid)
+    assert not own and pl["modules"]["duplicates"][0]["reasons"] == ["same_text"]
+
+
+def test_same_name_different_work_is_still_compared(user_client):
+    upload(user_client, "dissertatsiya.docx", make_docx(UZ["human"][:3]))
+    other = ["Bu boshqa talabaning ishi, u o'z kuzatuvlari haqida yozadi va natijalarni tahlil qiladi. " * 4, UZ["human"][1]]
+    aid = upload(user_client, "dissertatsiya.docx", make_docx(other))["analysis"]["id"]
+    pl, own = _own_sources(user_client, aid)
+    assert own, "a different work with the same file name must still be compared"
+    dup = pl["modules"]["duplicates"][0]
+    assert dup["reasons"] == ["same_name"] and not dup["excluded"]
 
 
 def test_web_check_can_be_declined(user_client, monkeypatch):
@@ -382,3 +466,18 @@ def test_corpus_document_with_single_title_heading_is_indexed(admin):
     res = corpus_upload(admin, [("d/one_title.docx", make_docx(UZ["human"], {0: "Raqamli ta'lim asoslari"}))])
     job = admin.get(f"/api/corpus/jobs/{res['job']['id']}").json()
     assert job["added"] == 1, job["log"]
+
+
+def test_brave_connection_error_is_explained_and_stops(user_client, monkeypatch):
+    class Offline(FakeBrave):
+        def search(self, q):
+            Offline.calls += 1
+            raise httpx.ConnectError("proxy refused")
+
+    Offline.calls = 0
+    monkeypatch.setattr(config.get_settings(), "BRAVE_API_KEY", SecretStr("test-key"))
+    monkeypatch.setattr(web, "BraveClient", Offline)
+    aid = upload(user_client, "offline.docx", make_docx(UZ["human"]), web_check="true", keep_for_similarity="false")["analysis"]["id"]
+    user_client.post(f"/api/analyses/{aid}/confirm", json={"web_check": True})
+    stats = user_client.get(f"/api/analyses/{aid}/plagiarism").json()["modules"]["web_stats"]
+    assert Offline.calls == 1 and stats["queries_used"] == 0 and stats["errors"][0].startswith("brave_connection")
