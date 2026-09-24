@@ -1,7 +1,8 @@
 """Local launcher (no Docker): SQLite + in-process worker + bundled web UI.
 
-Started by start.bat (Windows) or `python run_local.py` (any OS) using the
-Python inside backend/.venv. On every start it:
+Started by start.bat (Windows) or `python run_local.py` (any OS). All setup is
+done here in plain Python — start.bat only runs this file. On every start it:
+  0. creates backend/.venv on first run and re-runs itself with that Python,
   1. installs/updates Python packages when requirements changed,
   2. creates backend/.env with fresh secret keys on first run,
   3. creates/upgrades the SQLite database,
@@ -15,12 +16,14 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
 import threading
 import time
 import urllib.request
+import venv
 import webbrowser
 from pathlib import Path
 
@@ -28,11 +31,56 @@ ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
 REQS = BACKEND / "requirements-core.txt"
 ENV_FILE = BACKEND / ".env"
+VENV = BACKEND / ".venv"
+VENV_PYTHON = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 MARKER = Path(sys.prefix) / ".aasa-requirements.sha256"
+# Versions with prebuilt wheels for every dependency; newer Pythons are used only as a fallback.
+PREFERRED = ((3, 12), (3, 13), (3, 11))
 
 
 def say(msg: str) -> None:
     print(msg, flush=True)
+
+
+def in_venv() -> bool:
+    return Path(sys.prefix).resolve() == VENV.resolve()
+
+
+def _version_ok(v: tuple[int, int]) -> bool:
+    return v >= (3, 11)
+
+
+def base_python() -> list[str]:
+    """Python used to create the venv: this one if it is a preferred version, else a preferred one via the py launcher."""
+    if sys.version_info[:2] in PREFERRED:
+        return [sys.executable]
+    launcher = shutil.which("py")
+    if launcher:
+        for major, minor in PREFERRED:
+            if subprocess.call([launcher, f"-{major}.{minor}", "-c", "pass"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+                return [launcher, f"-{major}.{minor}"]
+    if _version_ok(sys.version_info[:2]):
+        return [sys.executable]
+    say("\n[XATO] Python 3.11 yoki undan yangi versiya topilmadi.")
+    say("Python 3.12 ni https://www.python.org/downloads/ saytidan yuklab o'rnating.")
+    say("O'rnatishda \"Add python.exe to PATH\" belgisini albatta qo'ying.")
+    sys.exit(1)
+
+
+def ensure_venv_and_rerun() -> None:
+    """Create backend/.venv once, then run this script again with the venv's Python."""
+    if in_venv():
+        return
+    if not VENV_PYTHON.exists():
+        base = base_python()
+        say("Virtual muhit yaratilmoqda (backend\\.venv)...")
+        if base == [sys.executable]:
+            venv.EnvBuilder(with_pip=True).create(VENV)
+        elif subprocess.call([*base, "-m", "venv", str(VENV)]) != 0:
+            say("[XATO] Virtual muhit yaratilmadi.")
+            sys.exit(1)
+    env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
+    sys.exit(subprocess.call([str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]], env=env))
 
 
 def ensure_packages() -> None:
@@ -138,12 +186,11 @@ def open_browser_when_ready(url: str) -> None:
 
 
 def main() -> None:
+    ensure_venv_and_rerun()
+    ensure_packages()
     if "--genkey" in sys.argv:
         print(new_fernet_key())
         return
-    if sys.version_info < (3, 11):
-        raise SystemExit("Python 3.11 yoki yangiroq versiya kerak")
-    ensure_packages()
     os.chdir(BACKEND)  # settings read backend/.env; relative data paths live in backend/data
     sys.path.insert(0, str(BACKEND))
     ensure_env()

@@ -159,6 +159,47 @@ def test_launcher_creates_env_with_valid_keys(tmp_path, monkeypatch):
     Fernet(rl.new_fernet_key().encode())
 
 
-def test_start_bat_present():
-    bat = (ROOT / "start.bat").read_text()
-    assert "run_local.py" in bat and "python.org" in bat
+def test_start_bat_only_runs_the_python_launcher():
+    lines = [ln.strip() for ln in (ROOT / "start.bat").read_text().splitlines() if ln.strip()]
+    commands = [ln for ln in lines if not ln.lower().startswith(("@echo", "echo", "rem", "(", ")", "if errorlevel", "pause", "cd /d"))]
+    assert commands == ["python run_local.py"]
+
+
+# Techniques antivirus heuristics associate with droppers; the launcher and shipped scripts must not use them.
+SUSPICIOUS = (
+    "powershell", "pwsh", "executionpolicy", "-encodedcommand", "invoke-expression", "iex ", "invoke-webrequest",
+    "downloadstring", "downloadfile", "bitsadmin", "certutil", "mshta", "wscript", "cscript", "regsvr32",
+    "rundll32", "curl ", "wget ", "start /min", "-windowstyle", "hidden", "frombase64", "b64decode", "reg add",
+    "schtasks", "attrib +h",
+)
+
+
+def test_shipped_scripts_avoid_suspicious_techniques():
+    scripts = [ROOT / "start.bat", ROOT / "run_local.py"] + [p for ext in ("*.bat", "*.cmd", "*.ps1", "*.vbs") for p in ROOT.glob(ext)]
+    for path in set(scripts):
+        text = path.read_text(encoding="utf-8").lower()
+        found = [w for w in SUSPICIOUS if w in text]
+        assert not found, (path.name, found)
+
+
+def test_bundled_ui_has_no_legacy_activex_code():
+    webui = ROOT / "backend" / "webui"
+    if not webui.exists():
+        pytest.skip("web UI not built")
+    offenders = [p.name for p in webui.rglob("*") if p.suffix in {".js", ".html"} and "ActiveXObject" in p.read_text(encoding="utf-8")]
+    assert not offenders
+
+
+def test_launcher_creates_venv_and_reruns_itself(tmp_path, monkeypatch):
+    rl = _load_launcher()
+    monkeypatch.setattr(rl, "VENV", tmp_path / ".venv")
+    monkeypatch.setattr(rl, "VENV_PYTHON", tmp_path / ".venv" / "bin" / "python")
+    created, ran = [], []
+    monkeypatch.setattr(rl.venv, "EnvBuilder", lambda **k: type("B", (), {"create": lambda self, d: created.append((d, k))})())
+    monkeypatch.setattr(rl, "base_python", lambda: [rl.sys.executable])
+    monkeypatch.setattr(rl.subprocess, "call", lambda cmd, **k: ran.append(cmd) or 0)
+    with pytest.raises(SystemExit) as e:
+        rl.ensure_venv_and_rerun()
+    assert e.value.code == 0
+    assert created == [(tmp_path / ".venv", {"with_pip": True})]
+    assert ran[0][0] == str(tmp_path / ".venv" / "bin" / "python") and ran[0][1].endswith("run_local.py")
