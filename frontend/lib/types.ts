@@ -87,9 +87,42 @@ export interface Plagiarism {
     web?: boolean;
     paraphrase?: { backend: string; chunks: number; matches: number; threshold?: number } | false;
     corpus_documents?: number;
-    web_stats?: { queries_used: number; fetched_pages: number; cached_pages: number; failed_pages: number; cost_usd: number; errors: string[] };
+    web_stats?: WebStats;
+    duplicates?: DuplicateDoc[];
   };
   exclusions: Record<string, number>;
+}
+
+export interface WebPage {
+  url: string;
+  title: string;
+  status: string;
+  cached: boolean;
+  words: number;
+  source_index?: number | null;
+}
+
+export interface WebStats {
+  queries_planned?: number;
+  queries_used: number;
+  results_total?: number;
+  queries_without_results?: number;
+  fetched_pages: number;
+  cached_pages: number;
+  failed_pages: number;
+  cost_usd: number;
+  errors: string[];
+  pages?: WebPage[];
+  query_log?: { q: string; results: number | null; error?: string }[];
+}
+
+export interface DuplicateDoc {
+  id: string;
+  filename: string;
+  uploaded_at: string | null;
+  reasons: ("same_file" | "same_name" | "same_text")[];
+  overlap: number | null;
+  excluded: boolean;
 }
 
 export interface CorpusStats {

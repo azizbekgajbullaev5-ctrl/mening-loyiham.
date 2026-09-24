@@ -156,7 +156,9 @@ def compare(
     web_sources: list[WebSource] | None = None,
     progress=None,
     run_paraphrase: bool = True,
+    exclude_own: set[str] | frozenset[str] = frozenset(),
 ) -> tuple[Outcome, TokenStream]:
+    """``exclude_own``: the user's documents that are copies of this one (never reported as sources)."""
     s = get_settings()
     stream, exclusions = build_stream(blocks, sections)
     n = len(stream.canon)
@@ -199,6 +201,8 @@ def compare(
                 )
             ).all()
             for h, doc_id in rows:
+                if doc_id in exclude_own:
+                    continue
                 per_own[doc_id].extend((g, None) for g in g_by_hash[h])
         if per_own:
             names = dict(db.execute(select(Document.id, Document.original_filename).where(Document.id.in_(list(per_own)))).all())

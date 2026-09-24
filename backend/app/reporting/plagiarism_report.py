@@ -36,6 +36,12 @@ L = {
         "no_text": "Asl fayl o'chirilgan — matn ko'rinishi mavjud emas.", "para": "parafraz",
         "disclaimer": "Hisobot avtomatik yaratilgan va ekspert xulosasi o'rnini bosmaydi. Yakuniy qaror matnni ko'rib chiqqan mutaxassis tomonidan qabul qilinadi.",
         "corpus": "Ma'lumotnoma bazasi ({n} hujjat)", "own": "Sizning hujjatlaringiz", "web": "Internet (Brave)", "paraphrase": "Semantik o'xshashlik ({b})",
+        "dup": "Bu hujjat avval yuklangan. Quyidagi nusxa(lar) solishtiruvdan chiqarildi: {items}.",
+        "dup_reasons": {"same_file": "aynan shu fayl", "same_name": "bir xil nom", "same_text": "bir xil matn"},
+        "web_pages": "TEKSHIRILGAN INTERNET SAHIFALARI",
+        "web_line": "{q} so'rov, {r} natija; {ok} sahifa yuklandi, {c} keshdan, {f} yuklanmadi.",
+        "h_page": "Sahifa", "h_status": "Holat", "h_found": "Natija", "found": "manba [{n}]", "not_found": "moslik yo'q",
+        "more_pages": "… va yana {n} ta sahifa.",
     },
     "en": {
         "title": "PLAGIARISM CHECK REPORT", "author": "Checked by", "doc": "Document", "type": "Document type", "started": "Checked on",
@@ -52,6 +58,12 @@ L = {
         "no_text": "Original file deleted — text view unavailable.", "para": "paraphrase",
         "disclaimer": "This report is generated automatically and does not replace an expert opinion. The final decision is made by a person who has read the text.",
         "corpus": "Reference corpus ({n} documents)", "own": "Your documents", "web": "Internet (Brave)", "paraphrase": "Semantic similarity ({b})",
+        "dup": "This document was uploaded before. These copies were left out of the comparison: {items}.",
+        "dup_reasons": {"same_file": "same file", "same_name": "same name", "same_text": "same text"},
+        "web_pages": "CHECKED WEB PAGES",
+        "web_line": "{q} queries, {r} results; {ok} pages downloaded, {c} from cache, {f} failed.",
+        "h_page": "Page", "h_status": "Status", "h_found": "Result", "found": "source [{n}]", "not_found": "no match",
+        "more_pages": "… and {n} more pages.",
     },
 }
 
@@ -119,6 +131,10 @@ def render_plagiarism_pdf(a, user, lang: str = "uz") -> bytes:
     ws = mods.get("web_stats") or {}
     web_txt = t["web_yes"].format(q=ws.get("queries_used", 0), c=ws.get("cost_usd", 0)) if mods.get("web") else ""
     story += [Spacer(1, 4), P(t["scope"].format(web=web_txt, excl=p["excluded_words"]), small)]
+    dups = [d for d in mods.get("duplicates") or [] if d.get("excluded")]
+    if dups:
+        items = "; ".join(f"{d['filename']} ({', '.join(t['dup_reasons'].get(r, r) for r in d['reasons'])})" for d in dups)
+        story += [Spacer(1, 4), Paragraph(f'<font color="#b45309">⚠</font> {escape(t["dup"].format(items=items))}', body)]
 
     story.append(P(t["sources"], h2))
     if p["sources"]:
@@ -141,6 +157,24 @@ def render_plagiarism_pdf(a, user, lang: str = "uz") -> bytes:
         story.append(st)
     else:
         story.append(P(t["no_sources"]))
+
+    if mods.get("web") and ws:
+        src_num = {src["index"]: i for i, src in enumerate(p["sources"], start=1)}
+        story += [P(t["web_pages"], h2), P(t["web_line"].format(q=ws.get("queries_used", 0), r=ws.get("results_total", "—"),
+                                                                ok=ws.get("fetched_pages", 0), c=ws.get("cached_pages", 0), f=ws.get("failed_pages", 0)), small)]
+        pages = sorted(ws.get("pages") or [], key=lambda pg: (pg.get("source_index") is None, pg.get("status") != "ok"))
+        if pages:
+            rows = [[P(t["h_page"], small), P(t["h_status"], small), P(t["h_found"], small)]]
+            for pg in pages[:60]:
+                n = src_num.get(pg.get("source_index"))
+                found = t["found"].format(n=n) if n else (t["not_found"] if pg.get("status") == "ok" else "—")
+                label = (pg.get("title") or "") + "\n" + pg["url"]
+                rows.append([Paragraph(escape(label).replace("\n", "<br/>"), small), P(pg.get("status", ""), small), P(found, small)])
+            wt = Table(rows, colWidths=[120 * mm, 28 * mm, 22 * mm], repeatRows=1)
+            wt.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cbd5e1")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eff6ff")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+            story.append(wt)
+            if len(pages) > 60:
+                story.append(P(t["more_pages"].format(n=len(pages) - 60), small))
 
     story.append(P(t["tricks"], h2))
     items = (p["integrity"] or {}).get("items", [])
