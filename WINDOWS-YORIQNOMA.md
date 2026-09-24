@@ -36,7 +36,10 @@ python --version
 
 1. `C:\AkademikTahlil` papkasini oching va **`start.bat`** faylini ikki marta bosing.
 2. Agar **"Windows protected your PC"** (SmartScreen) oynasi chiqsa: **"More info"** → **"Run anyway"**.
-3. Birinchi marta dastur o'zi quyidagilarni bajaradi (internet kerak, **3–10 daqiqa**):
+3. `start.bat` faqat bitta buyruqni bajaradi: `python run_local.py`. Qolgan hamma ish oddiy Python kodida
+   (`run_local.py`) — PowerShell, yashirin oyna yoki boshqa yuklab oluvchi dasturlar ishlatilmaydi.
+   Birinchi marta dastur o'zi quyidagilarni bajaradi (internet kerak, **3–10 daqiqa**):
+   - `backend\.venv` virtual muhitini yaratadi;
    - kerakli kutubxonalarni o'rnatadi (~100 MB);
    - maxfiy kalitlarni yaratadi (**`FILE_ENCRYPTION_KEY`** ham — qo'lda hech narsa kiritish shart emas);
    - SQLite ma'lumotlar bazasini yaratadi.
@@ -94,14 +97,10 @@ Faqat skaner qilingan (matni belgilanmaydigan) PDF'lar uchun kerak. Oddiy DOCX/P
   Yuklangan hujjatlar shu kalit bilan shifrlanadi.
 * **`backend\.env` faylining zaxira nusxasini oling** (masalan, fleshkaga). Kalit yo'qolsa, saqlangan
   hujjatlarni ochib bo'lmaydi (tahlil natijalari saqlanib qoladi).
-* Yangi kalitni qo'lda olish kerak bo'lsa (Docker'siz), ikki usul:
-  - `C:\AkademikTahlil` papkasida adres satriga `cmd` yozib Enter bosing, keyin:
+* Yangi kalitni qo'lda olish kerak bo'lsa (Docker'siz): `C:\AkademikTahlil` papkasida adres satriga `cmd`
+  yozib Enter bosing, keyin:
     ```
-    backend\.venv\Scripts\python.exe run_local.py --genkey
-    ```
-  - yoki **PowerShell**da (Python'siz):
-    ```powershell
-    $b = New-Object byte[] 32; (New-Object Security.Cryptography.RNGCryptoServiceProvider).GetBytes($b); [Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')
+    python run_local.py --genkey
     ```
   Chiqqan qatorni `backend\.env` dagi `FILE_ENCRYPTION_KEY=` dan keyin qo'ying.
   ⚠️ Mavjud kalitni almashtirsangiz, avval yuklangan hujjatlarning asl fayllari ochilmay qoladi.
@@ -207,7 +206,7 @@ Hujjatni ilovada **"O'chirish"** tugmasi bilan o'chirsangiz, fayl va barcha nati
 | "Skanerlangan PDF: OCR (Tesseract) o'rnatilmagan" | 5-qadam (Tesseract) ni bajaring. |
 | "PDF parol bilan himoyalangan" | Parolni olib tashlab qayta yuklang. |
 | Tahlil xato bilan to'xtadi | Natija sahifasida **"To'xtagan joyidan davom ettirish"** ni bosing. Takrorlansa, qora oynadagi xabarni nusxalab yuboring. |
-| Windows Defender ZIP'ni "virus" deb bloklaydi | Defender → **Himoya tarixi** (Protection history) da tahdid nomi va fayl yo'lini ko'ring va bizga yuboring. Dasturda zararli fayl yo'q; bu odatda noto'g'ri signal (false positive). Faylni https://www.microsoft.com/wdsi/filesubmission orqali Microsoft'ga "noto'g'ri aniqlash" sifatida yuborish mumkin. |
+| Windows Defender ZIP'ni "virus" deb bloklaydi (masalan `Trojan:Script/Wacatac.B!ml`) | Bu ML-evristika. Dasturda PowerShell, yashirin oyna, internetdan skript yuklash yo'q; eski brauzerlar uchun `ActiveXObject` kodi bor fayl ham olib tashlangan. Baribir bloklansa: Defender → **Himoya tarixi** (Protection history) da tahdid nomi va fayl yo'lini ko'ring va bizga yuboring. Dasturda zararli fayl yo'q; bu odatda noto'g'ri signal (false positive). Faylni https://www.microsoft.com/wdsi/filesubmission orqali Microsoft'ga "noto'g'ri aniqlash" sifatida yuborish mumkin. |
 | Butunlay qaytadan o'rnatish kerak | `backend\.venv` papkasini o'chirib, `start.bat` ni qayta ishga tushiring (`backend\.env` va `backend\data` ga tegmang). |
 
 ---
