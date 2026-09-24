@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str = f"sqlite:///{BASE_DIR / 'data' / 'dev.db'}"
     REDIS_URL: str = "redis://localhost:6379/0"
     TASK_MODE: Literal["rq", "thread", "inline"] = "thread"
+    # In-process mode: how many documents are analysed at the same time. 1 keeps
+    # memory use predictable on small machines (large dissertations queue up).
+    MAX_CONCURRENT_ANALYSES: int = 1
+    # Automatic retries of an interrupted/failed analysis (resumes from checkpoints).
+    AUTO_RETRY_ATTEMPTS: int = 2
     RQ_QUEUE_NAME: str = "analysis"
     JOB_TIMEOUT_SECONDS: int = 60 * 60
 
@@ -53,6 +58,11 @@ class Settings(BaseSettings):
     OCR_LANGUAGES: str = "uzb+rus+eng"
     OCR_MAX_PAGES: int = 400
     OCR_DPI: int = 250
+    # Path to tesseract.exe on Windows if it is not on PATH (auto-detected when empty)
+    TESSERACT_CMD: str = ""
+
+    # --- bundled web UI (static export served by the backend; used by the Windows launcher)
+    WEBUI_DIR: Path = BASE_DIR / "webui"
 
     # --- analysis ---
     SUSPICIOUS_THRESHOLD: float = 60.0
@@ -73,7 +83,7 @@ class Settings(BaseSettings):
     SIMILARITY_RPM: int = 20
 
     ANTHROPIC_API_KEY: SecretStr = SecretStr("")
-    ANTHROPIC_MODEL: str = "claude-opus-5"
+    ANTHROPIC_MODEL: str = "claude-haiku-4-5"  # lightest/cheapest Claude model
     OPENAI_API_KEY: SecretStr = SecretStr("")
     OPENAI_MODEL: str = "gpt-4o-mini"
     LLM_REVIEW_ENABLED: bool = False  # LLM-assisted stylistic review is opt-in

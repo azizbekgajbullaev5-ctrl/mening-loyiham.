@@ -22,6 +22,7 @@ SHINGLE = 6
 WINNOW_WINDOW = 4
 REPEATED_PHRASE_MIN = 5
 REPEATED_PHRASE_MAX = 9
+MAX_PAIR_POSTINGS = 24
 
 
 @dataclass
@@ -103,16 +104,19 @@ def analyze(
     for pid, lst in sh.items():
         for h in {h for h, _ in lst}:
             by_hash[h].append(pid)
-    pos = {p.id: i for i, p in enumerate(passages)}
     covered: dict[int, set[int]] = defaultdict(set)  # passage -> covered token positions
     pair_hits: Counter = Counter()
     for pid, lst in sh.items():
         for h, start in lst:
-            others = [o for o in by_hash[h] if o != pid and abs(pos[o] - pos[pid]) > 0]
-            if others:
-                covered[pid].update(range(start, start + SHINGLE))
-                for o in others:
-                    pair_hits[(min(pid, o), max(pid, o))] += 1
+            posting = by_hash[h]
+            if len(posting) < 2:
+                continue
+            covered[pid].update(range(start, start + SHINGLE))
+            # A shingle repeated in very many passages is boilerplate; counting all
+            # its pairs is quadratic on 500-page documents, so cap the pairing.
+            for o in posting[:MAX_PAIR_POSTINGS]:
+                if o != pid:
+                    pair_hits[(pid, o) if pid < o else (o, pid)] += 1
     matches: list[Match] = []
     for (a, b), hits in pair_hits.items():
         denom = max(1, min(len(sh.get(a, [])), len(sh.get(b, []))))
@@ -213,11 +217,17 @@ def paraphrase_candidates(passages: list[SimPassage], pair_hits: Counter, sh: di
         return []
     texts = [re.sub(r"\d+", " ", normalize(p.text).lower()) for p in usable]
     vec = TfidfVectorizer(analyzer="char_wb", ngram_range=(4, 5), sublinear_tf=True, min_df=1, max_features=60000)
-    X = vec.fit_transform(texts)
-    sims = (X @ X.T).tocoo()
+    X = vec.fit_transform(texts).tocsr()
     out: list[Match] = []
-    for i, j, v in zip(sims.row, sims.col, sims.data):
-        if i >= j or v < 0.55:
+    # Row blocks keep memory bounded for 500-page documents (thousands of passages).
+    block = 256
+    candidates = []
+    for start in range(0, X.shape[0], block):
+        part = (X[start : start + block] @ X.T).tocoo()
+        keep = part.data >= 0.55
+        candidates.extend(zip(part.row[keep] + start, part.col[keep], part.data[keep]))
+    for i, j, v in candidates:
+        if i >= j:
             continue
         a, b = usable[i], usable[j]
         if abs(a.paragraph_start - b.paragraph_start) <= 1:

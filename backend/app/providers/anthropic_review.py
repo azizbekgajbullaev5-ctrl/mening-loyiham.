@@ -64,16 +64,18 @@ class AnthropicReviewProvider(AIAnalysisProvider):
                 out.append(AIProviderResult(p.id, cached["score"], cached.get("confidence"), cached.get("characteristics", []), cached.get("explanation"), cached=True))
                 continue
             self.limiter.wait()
+            extra: dict = {}
+            if self.model.startswith(("claude-opus-5", "claude-fable")):
+                # Server-side fallback when a request is declined by a safety classifier.
+                extra = {"extra_headers": {"anthropic-beta": "server-side-fallback-2026-07-01"}, "extra_body": {"fallbacks": "default"}}
             try:
                 response = client.messages.parse(
                     model=self.model,
-                    max_tokens=16000,
+                    max_tokens=2048,  # short JSON assessment
                     system=SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": user_prompt(p.text, p.language)}],
                     output_format=StyleAssessment,
-                    # Server-side fallback when a request is declined by a safety classifier.
-                    extra_headers={"anthropic-beta": "server-side-fallback-2026-07-01"},
-                    extra_body={"fallbacks": "default"},
+                    **extra,
                 )
             except anthropic.RateLimitError:
                 out.append(AIProviderResult(p.id, None, error="rate_limited"))

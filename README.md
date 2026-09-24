@@ -18,6 +18,9 @@ It analyzes academic documents (DOCX / PDF / TXT, Uzbek-Latin / Russian / Englis
 > This tool is not a "100% accurate AI detector", does not "guarantee" detection of any model, and has no
 > feature for rewriting text to evade detectors. Its purpose is academic document analysis and quality control.
 
+> **Windows, Docker'siz:** faqat Python kerak — `start.bat` ni ikki marta bosing.
+> O'zbekcha qadamma-qadam yo'riqnoma: **[WINDOWS-YORIQNOMA.md](WINDOWS-YORIQNOMA.md)**.
+
 The earlier static "OAK journals" site now lives in [`portal/`](portal/) and is still published to GitHub
 Pages (the workflow uploads `portal/` only).
 
@@ -25,6 +28,7 @@ Pages (the workflow uploads `portal/` only).
 
 ## Contents
 
+0. [Windows / no Docker (start.bat)](#0-windows--no-docker-startbat)
 1. [Quick start (Docker)](#1-quick-start-docker)
 2. [Local development](#2-local-development)
 3. [Environment variables](#3-environment-variables)
@@ -41,6 +45,35 @@ Further reading: [`docs/methodology.md`](docs/methodology.md) · [`docs/architec
 [`docs/providers.md`](docs/providers.md)
 
 ---
+
+## 0. Windows / no Docker (start.bat)
+
+For a single researcher's PC (e.g. Windows 11, 8 GB RAM) the whole application runs as **one Python process**:
+SQLite database, in-process worker, and the web UI pre-built into `backend/webui/` (no Node.js needed).
+
+1. Install Python 3.12 from python.org (tick *Add python.exe to PATH*).
+2. Download the repository (ZIP) and double-click **`start.bat`**. On first run it creates `backend\.venv`,
+   installs `backend/requirements-core.txt`, generates `backend\.env` with a random `SECRET_KEY` and
+   `FILE_ENCRYPTION_KEY`, migrates the SQLite database, starts the server on `http://127.0.0.1:8000` (next free
+   port if busy) and opens the browser. On other OSes: `python -m venv backend/.venv` then
+   `backend/.venv/bin/python run_local.py`.
+
+Behaviour tuned for large documents (150–500 pages, up to 60 MB):
+
+* **one analysis at a time** (`MAX_CONCURRENT_ANALYSES=1`); further uploads wait and show their queue position;
+* progress per stage, including per-page OCR progress;
+* **resume**: text extraction and every OCR'd page are checkpointed (encrypted, in `backend/data/uploads/checkpoints`);
+  after an error the job is retried automatically (`AUTO_RETRY_ATTEMPTS=2`), after closing the window / power loss
+  the next start resumes queued/running jobs, and failed jobs have a *resume* button (`POST /api/analyses/{id}/resume`);
+* no neural model is loaded locally (the stylometric estimator needs a few hundred MB of RAM); the optional
+  external review uses the lightest Claude model, `claude-haiku-4-5`, only in DEEP analysis.
+
+Measured in the development sandbox: a 500-page, 27 MB text PDF — 96 s, peak ~500 MB RSS; a 500-page DOCX — 38 s;
+OCR ~10 s/page for scanned pages at 250 dpi (lower `OCR_DPI` to speed it up). A `kill -9` during OCR (page 12/30)
+resumed at page 11 after restart; a kill during the similarity stage of the 500-page PDF resumed from the extraction
+checkpoint and finished in 28 s. Speeds on your machine will differ.
+
+To rebuild the bundled UI after frontend changes: `cd frontend && npm run build:webui`.
 
 ## 1. Quick start (Docker)
 
@@ -103,7 +136,9 @@ All configuration is read by the backend from the environment (or `.env`). See
 | `SECRET_KEY` | dev value | JWT signing key |
 | `FILE_ENCRYPTION_KEY` | derived in dev | Fernet key used to encrypt stored uploads |
 | `DATABASE_URL` | SQLite file | e.g. `postgresql+psycopg2://user:pass@host:5432/db` |
-| `REDIS_URL` / `TASK_MODE` | `thread` | `rq` (production), `thread` (dev), `inline` (tests) |
+| `REDIS_URL` / `TASK_MODE` | `thread` | `rq` (production), `thread` (dev / Windows launcher), `inline` (tests) |
+| `MAX_CONCURRENT_ANALYSES`, `AUTO_RETRY_ATTEMPTS` | 1, 2 | in-process worker: parallel analyses, automatic retries (resume from checkpoints) |
+| `TESSERACT_CMD` | auto | path to `tesseract.exe` if not in the default Windows location |
 | `COOKIE_SECURE` | `false` | set `true` behind HTTPS |
 | `MAX_UPLOAD_MB`, `MAX_FILES_PER_UPLOAD` | 50, 10 | upload limits |
 | `DELETE_FILES_AFTER_ANALYSIS`, `RETENTION_DAYS` | false, 0 | automatic clean-up of original files |
@@ -152,7 +187,7 @@ and *"Local/document similarity analysis only."*, and every external provider is
 |---|---|---|
 | Generic AI-detection API | `AI_DETECTOR_API_URL` + `AI_DETECTOR_API_KEY` (+ score field/scale) | DEEP analysis, top suspicious passages |
 | Generic similarity/plagiarism API | `SIMILARITY_API_URL` + `SIMILARITY_API_KEY` | DEEP analysis, all body passages (batched) |
-| LLM-assisted stylistic review (Claude) | `LLM_REVIEW_ENABLED=true` + `ANTHROPIC_API_KEY` (`ANTHROPIC_MODEL`, default `claude-opus-5`) | DEEP analysis, top suspicious passages |
+| LLM-assisted stylistic review (Claude) | `LLM_REVIEW_ENABLED=true` + `ANTHROPIC_API_KEY` (`ANTHROPIC_MODEL`, default `claude-haiku-4-5` — the lightest model; set e.g. `claude-opus-5` for stronger review) | DEEP analysis, top suspicious passages |
 | LLM-assisted stylistic review (OpenAI) | `LLM_REVIEW_ENABLED=true` + `OPENAI_API_KEY` | DEEP analysis, top suspicious passages |
 
 Provider results are cached by passage hash, rate-limited, retried on 429/5xx and shown side by side with the
@@ -194,7 +229,7 @@ reports. `DELETE /api/documents/{id}/file` deletes only the original file and ke
 
 ```bash
 cd backend
-pytest                                   # 91 tests, SQLite, ~1 minute
+pytest                                   # 102 tests, SQLite, ~1 minute
 TEST_DATABASE_URL=postgresql+psycopg2://aasa:aasa@localhost:5432/aasa_test pytest   # same suite on PostgreSQL
 
 cd frontend
@@ -208,7 +243,9 @@ OCR of a scanned PDF (skipped if Tesseract is absent), upload validation (bad si
 size), language detection, section and TOC detection, chunking, scoring behaviour per language, confidence
 caps, similarity (internal, same-owner corpus, owner isolation), academic checks, authentication and rate
 limiting, authorization between users, deletion, encryption at rest, manual structure correction, PDF/DOCX
-reports, external provider success/429 retry/failure/caching/comparison, and a ~300-page dissertation.
+reports, external provider success/429 retry/failure/caching/comparison, a ~300-page dissertation, and the
+local mode (checkpoint resume after a crash, OCR page resume, automatic retry, no retry for permanent errors, queue
+position, bundled UI served by the backend, SQLite WAL, launcher key generation).
 
 ## 9. What is local vs. external
 

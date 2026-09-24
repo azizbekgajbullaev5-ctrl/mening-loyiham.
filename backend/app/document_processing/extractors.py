@@ -19,11 +19,23 @@ ProgressFn = Callable[[float, str], None]
 W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 
-def extract(file_type: str, data: bytes, progress: ProgressFn | None = None) -> ExtractedDocument:
+OcrPageFn = Callable[[int, str], None]
+
+
+def extract(
+    file_type: str,
+    data: bytes,
+    progress: ProgressFn | None = None,
+    ocr_cache: dict[str, str] | None = None,
+    on_ocr_page: OcrPageFn | None = None,
+) -> ExtractedDocument:
+    """``ocr_cache`` / ``on_ocr_page`` let a resumed analysis skip pages already OCR'd."""
     if file_type == "docx":
+        if progress:
+            progress(0.1, "docx")
         doc = extract_docx(data)
     elif file_type == "pdf":
-        doc = extract_pdf(data, progress)
+        doc = extract_pdf(data, progress, ocr_cache, on_ocr_page)
     elif file_type == "txt":
         doc = extract_txt(data)
     else:
@@ -172,7 +184,12 @@ def _assign_estimated_pages(blocks: list[Block], page_count: int) -> None:
 
 
 # ---------------------------------------------------------------- PDF
-def extract_pdf(data: bytes, progress: ProgressFn | None = None) -> ExtractedDocument:
+def extract_pdf(
+    data: bytes,
+    progress: ProgressFn | None = None,
+    ocr_cache: dict[str, str] | None = None,
+    on_ocr_page: OcrPageFn | None = None,
+) -> ExtractedDocument:
     import pymupdf as fitz
 
     try:
@@ -224,7 +241,7 @@ def extract_pdf(data: bytes, progress: ProgressFn | None = None) -> ExtractedDoc
             scanned_pages.append(pno)
         raw_pages.append(items)
         if progress and pno % 10 == 0:
-            progress(pno / max(1, page_count) * 0.5, "extract_pdf")
+            progress(pno / max(1, page_count) * 0.5, f"{pno + 1}/{page_count}")
 
     warnings: list[str] = []
     is_scanned = bool(page_count) and len(scanned_pages) / page_count >= 0.5
@@ -234,15 +251,21 @@ def extract_pdf(data: bytes, progress: ProgressFn | None = None) -> ExtractedDoc
             todo = scanned_pages[: s.OCR_MAX_PAGES]
             if len(todo) < len(scanned_pages):
                 warnings.append("ocr_page_limit")
+            ocr_cache = ocr_cache or {}
             for k, pno in enumerate(todo):
-                text = _ocr_page(pdf[pno], s.OCR_DPI, s.OCR_LANGUAGES)
+                if str(pno) in ocr_cache:  # resumed: this page was already recognised
+                    text = ocr_cache[str(pno)]
+                else:
+                    text = _ocr_page(pdf[pno], s.OCR_DPI, s.OCR_LANGUAGES)
+                    if on_ocr_page:
+                        on_ocr_page(pno, text)
                 raw_pages[pno] = [
                     {"text": collapse_ws(p), "size": 0, "bold": False, "edge": False, "chars": len(p), "ocr": True}
                     for p in re.split(r"\n\s*\n", text)
                     if p.strip()
                 ]
                 if progress:
-                    progress(0.5 + (k + 1) / len(todo) * 0.5, "ocr")
+                    progress(0.5 + (k + 1) / len(todo) * 0.5, f"OCR {k + 1}/{len(todo)}")
             ocr_used = True
             warnings.append("ocr_used")
         else:
@@ -331,10 +354,31 @@ def _merge_split_pdf_paragraphs(blocks: list[Block]) -> list[Block]:
     return out
 
 
+_WINDOWS_TESSERACT = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+)
+_ocr_langs: set[str] | None = None
+
+
+def _configure_tesseract() -> None:
+    import os
+
+    import pytesseract
+
+    cmd = get_settings().TESSERACT_CMD
+    if not cmd and os.name == "nt":
+        local = os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe")
+        cmd = next((c for c in (*_WINDOWS_TESSERACT, local) if os.path.exists(c)), "")
+    if cmd:
+        pytesseract.pytesseract.tesseract_cmd = cmd
+
+
 def _ocr_available() -> bool:
     try:
         import pytesseract
 
+        _configure_tesseract()
         pytesseract.get_tesseract_version()
         return True
     except Exception:  # noqa: BLE001
@@ -347,7 +391,10 @@ def _ocr_page(page, dpi: int, langs: str) -> str:
 
     pix = page.get_pixmap(dpi=dpi)
     img = Image.open(io.BytesIO(pix.tobytes("png")))
-    available = set(pytesseract.get_languages(config=""))
+    global _ocr_langs
+    if _ocr_langs is None:
+        _ocr_langs = set(pytesseract.get_languages(config=""))
+    available = _ocr_langs
     use = "+".join(lang for lang in langs.split("+") if lang in available) or "eng"
     return pytesseract.image_to_string(img, lang=use)
 

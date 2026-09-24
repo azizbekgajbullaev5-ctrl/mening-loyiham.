@@ -15,7 +15,7 @@ from sqlalchemy import select
 from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.models import Analysis, Document
-from app.services import storage
+from app.services import checkpoints, storage
 from app.services.audit import audit
 
 log = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ def cleanup_expired_files() -> int:
         docs = db.scalars(select(Document).where(Document.storage_key.is_not(None), Document.created_at < cutoff)).all()
         for d in docs:
             storage.delete(d.storage_key)
+            checkpoints.delete_document(d.id)
             d.storage_key, d.file_deleted_at = None, datetime.now(UTC)
             audit(db, "retention_file_deleted", d.owner_id, "document", d.id)
             n += 1

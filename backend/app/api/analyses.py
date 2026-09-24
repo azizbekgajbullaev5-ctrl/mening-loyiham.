@@ -16,6 +16,8 @@ from app.reporting.builder import build_report_data
 from app.reporting.docx_report import render_docx
 from app.reporting.pdf_report import render_pdf
 from app.services.audit import audit
+from app.services.pipeline import reset_for_resume
+from app.tasks.queue import enqueue_analysis
 
 router = APIRouter(prefix="/analyses", tags=["analyses"])
 Lang = Literal["uz", "en"]
@@ -30,6 +32,22 @@ def list_analyses(limit: int = Query(50, ge=1, le=200), user: User = Depends(get
 @router.get("/{analysis_id}")
 def get_analysis(analysis_id: str, lang: Lang = "uz", user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return analysis_detail(owned_analysis(db, user, analysis_id), lang)
+
+
+@router.post("/{analysis_id}/resume")
+def resume_analysis(analysis_id: str, request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Continue a failed analysis. Saved extraction/OCR checkpoints are reused."""
+    a = owned_analysis(db, user, analysis_id)
+    if a.status not in ("failed",):
+        raise HTTPException(409, "analysis_not_failed")
+    if not a.document.storage_key:
+        raise HTTPException(410, "file_deleted")
+    reset_for_resume(db, a)
+    audit(db, "analysis_resumed", user.id, "analysis", a.id, client_ip(request))
+    db.commit()
+    enqueue_analysis(a.id)
+    db.refresh(a)
+    return analysis_summary(a)
 
 
 @router.get("/{analysis_id}/sections")

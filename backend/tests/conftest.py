@@ -13,6 +13,7 @@ os.environ.update(
         "TASK_MODE": "inline",
         "SECRET_KEY": "test-secret-key-0123456789",
         "LOGIN_RATE_LIMIT_PER_MINUTE": "1000",
+        "AUTO_RETRY_ATTEMPTS": "0",
         # make sure no real external provider is picked up from the environment
         "AI_DETECTOR_API_URL": "", "AI_DETECTOR_API_KEY": "", "SIMILARITY_API_URL": "", "SIMILARITY_API_KEY": "",
         "ANTHROPIC_API_KEY": "", "OPENAI_API_KEY": "", "LLM_REVIEW_ENABLED": "false",

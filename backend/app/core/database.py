@@ -15,7 +15,7 @@ class Base(DeclarativeBase):
 def _make_engine(url: str):
     kwargs: dict = {"pool_pre_ping": True, "future": True}
     if url.startswith("sqlite"):
-        kwargs["connect_args"] = {"check_same_thread": False}
+        kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
         if url.startswith("sqlite:///"):
             from pathlib import Path
 
@@ -24,9 +24,13 @@ def _make_engine(url: str):
     if url.startswith("sqlite"):
 
         @event.listens_for(eng, "connect")
-        def _fk_on(dbapi_conn, _):  # enforce ON DELETE CASCADE in SQLite
+        def _fk_on(dbapi_conn, _):
             cur = dbapi_conn.cursor()
-            cur.execute("PRAGMA foreign_keys=ON")
+            cur.execute("PRAGMA foreign_keys=ON")  # enforce ON DELETE CASCADE
+            # WAL lets the web server read progress while the worker thread writes
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=30000")
+            cur.execute("PRAGMA synchronous=NORMAL")
             cur.close()
 
     return eng

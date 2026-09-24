@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { del } from "@/lib/api";
 import { date, num, pct } from "@/lib/format";
+import { analysisHref } from "@/lib/links";
 import { t } from "@/lib/i18n";
 import type { AnalysisSummary } from "@/lib/types";
 import { Card, ConfidenceBadge, StatusBadge } from "./ui";
@@ -37,7 +38,7 @@ export function AnalysesTable({ items, onChanged }: { items: AnalysisSummary[]; 
                 {items.map((a) => (
                   <tr key={a.id} className="hover:bg-slate-50">
                     <td className="td max-w-xs">
-                      <Link href={`/analyses/${a.id}`} className="font-medium text-brand-700 hover:underline">{a.document_name}</Link>
+                      <Link href={analysisHref(a.id)} className="font-medium text-brand-700 hover:underline">{a.document_name}</Link>
                       <div className="text-xs text-slate-400">{t.docTypes[a.doc_type ?? ""] ?? ""} · {t.depths[a.depth]}</div>
                     </td>
                     <td className="td">{a.language ? t.languages[a.language] ?? a.language : "—"}</td>
@@ -47,10 +48,10 @@ export function AnalysesTable({ items, onChanged }: { items: AnalysisSummary[]; 
                       {a.ai_confidence && <div className="mt-0.5"><ConfidenceBadge value={a.ai_confidence} /></div>}
                     </td>
                     <td className="td text-right tabular-nums">{pct(a.similarity_overall)}</td>
-                    <td className="td"><StatusBadge status={a.status} progress={a.progress} /></td>
+                    <td className="td"><StatusBadge status={a.status} progress={a.progress} queue={a.queue_position} /></td>
                     <td className="td whitespace-nowrap text-xs text-slate-500">{date(a.created_at)}</td>
                     <td className="td whitespace-nowrap text-right">
-                      <Link href={`/analyses/${a.id}`} className="mr-3 text-xs text-brand-700 hover:underline">{t.table.open}</Link>
+                      <Link href={analysisHref(a.id)} className="mr-3 text-xs text-brand-700 hover:underline">{t.table.open}</Link>
                       <button onClick={() => remove(a.document_id)} className="text-xs text-red-600 hover:underline">{t.table.delete}</button>
                     </td>
                   </tr>
@@ -63,8 +64,8 @@ export function AnalysesTable({ items, onChanged }: { items: AnalysisSummary[]; 
             {items.map((a) => (
               <li key={a.id} className="rounded-lg border border-slate-200 p-3">
                 <div className="flex items-start justify-between gap-2">
-                  <Link href={`/analyses/${a.id}`} className="font-medium text-brand-700">{a.document_name}</Link>
-                  <StatusBadge status={a.status} progress={a.progress} />
+                  <Link href={analysisHref(a.id)} className="font-medium text-brand-700">{a.document_name}</Link>
+                  <StatusBadge status={a.status} progress={a.progress} queue={a.queue_position} />
                 </div>
                 <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
                   <div><dt className="text-slate-400">{t.table.ai}</dt><dd className="font-semibold">{pct(a.ai_likelihood)}</dd></div>

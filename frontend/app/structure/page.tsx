@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Card, Notice, Spinner } from "@/components/ui";
 import { get, put } from "@/lib/api";
+import { analysisHref } from "@/lib/links";
 import { t } from "@/lib/i18n";
 import type { AnalysisSummary, ContentParagraph } from "@/lib/types";
 
@@ -14,8 +15,8 @@ const KINDS = ["title", "toc", "abstract", "keywords", "introduction", "literatu
 const defaultLevel = (k: string) => (k === "section" ? 2 : k === "subsection" ? 3 : 1);
 
 function Editor() {
-  const { id } = useParams<{ id: string }>();
   const search = useSearchParams();
+  const id = search.get("id") ?? "";
   const router = useRouter();
   const [paras, setParas] = useState<ContentParagraph[] | null>(null);
   const [heads, setHeads] = useState<Map<number, Head>>(new Map());
@@ -47,7 +48,7 @@ function Editor() {
     setBusy(true);
     try {
       const r = await put<{ analysis: AnalysisSummary }>(`/documents/${id}/structure`, { headings: Array.from(heads.values()), reanalyze: true, depth });
-      router.push(`/analyses/${r.analysis.id}`);
+      router.push(analysisHref(r.analysis.id));
     } catch {
       setError(t.common.error);
       setBusy(false);
@@ -58,7 +59,7 @@ function Editor() {
   if (!paras) return <Spinner />;
   return (
     <div className="space-y-4">
-      <Link href={search.get("analysis") ? `/analyses/${search.get("analysis")}` : "/"} className="text-xs text-brand-700 hover:underline">← {t.structure.back}</Link>
+      <Link href={search.get("analysis") ? analysisHref(search.get("analysis") as string) : "/"} className="text-xs text-brand-700 hover:underline">← {t.structure.back}</Link>
       <Card title={t.structure.title} subtitle={t.structure.hint} actions={
         <div className="flex gap-2">
           <select className="input w-auto" value={depth} onChange={(e) => setDepth(e.target.value)}>

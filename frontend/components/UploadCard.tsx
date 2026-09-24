@@ -1,12 +1,11 @@
 "use client";
-import { useRef, useState } from "react";
-import { ApiError, uploadWithProgress } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { ApiError, get, uploadWithProgress } from "@/lib/api";
 import { bytes } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import { Card, ProgressBar } from "./ui";
 
 const ACCEPT = ".docx,.pdf,.txt";
-const MAX_MB = 50;
 
 export function UploadCard({ onUploaded }: { onUploaded: () => void }) {
   const [files, setFiles] = useState<File[]>([]);
@@ -17,6 +16,10 @@ export function UploadCard({ onUploaded }: { onUploaded: () => void }) {
   const [errors, setErrors] = useState<string[]>([]);
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const [maxMb, setMaxMb] = useState(50);
+  useEffect(() => {
+    get<{ max_upload_mb: number }>("/system/config").then((c) => setMaxMb(c.max_upload_mb)).catch(() => {});
+  }, []);
 
   const addFiles = (list: FileList | null) => {
     if (!list) return;
@@ -27,8 +30,8 @@ export function UploadCard({ onUploaded }: { onUploaded: () => void }) {
         errs.push(`${f.name}: faqat DOCX, PDF yoki TXT`);
         return false;
       }
-      if (f.size > MAX_MB * 1024 * 1024) {
-        errs.push(`${f.name}: ${MAX_MB} MB dan katta`);
+      if (f.size > maxMb * 1024 * 1024) {
+        errs.push(`${f.name}: ${maxMb} MB dan katta`);
         return false;
       }
       return true;
@@ -71,7 +74,7 @@ export function UploadCard({ onUploaded }: { onUploaded: () => void }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
         </svg>
         <p className="text-sm font-medium text-slate-700">{t.upload.drop}</p>
-        <p className="text-xs text-slate-500">{t.upload.formats}</p>
+        <p className="text-xs text-slate-500">{t.upload.formats} · {maxMb} MB gacha</p>
         <button type="button" className="btn-secondary mt-3" onClick={() => input.current?.click()}>{t.upload.choose}</button>
         <input ref={input} type="file" accept={ACCEPT} multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} data-testid="file-input" />
       </div>

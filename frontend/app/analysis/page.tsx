@@ -1,23 +1,30 @@
 "use client";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChaptersCharts } from "@/components/Charts";
 import { AcademicPanel, ChaptersTable, DocumentViewer, MethodPanel, OverviewPanel, PassagesPanel, SimilarityPanel } from "@/components/ResultPanels";
 import { Card, Notice, ProgressBar, Spinner, StatusBadge } from "@/components/ui";
 import { get, post } from "@/lib/api";
+import { analysisHref, structureHref } from "@/lib/links";
 import { t } from "@/lib/i18n";
 import type { AnalysisDetail, AnalysisSummary, SectionRow } from "@/lib/types";
 
 type Tab = keyof typeof t.result.tabs;
 
 function Progress({ a }: { a: AnalysisDetail }) {
+  const msg = a.message === "checkpoint" ? t.result.resumedFromCheckpoint : a.message.startsWith("retry") ? t.result.retrying : a.message === "resume" ? "" : a.message;
   return (
     <Card title={a.document_name ?? ""} subtitle={`${t.depths[a.depth]} · ${t.status[a.status]}`}>
       <div className="space-y-3">
+        {a.status === "queued" && a.queue_position !== null && (
+          <Notice>
+            {t.result.queuePosition}: <b>{a.queue_position}</b>. {t.result.queueHint}
+          </Notice>
+        )}
         <div className="flex items-center justify-between text-sm">
-          <span className="font-medium text-slate-700">{t.stages[a.stage] ?? a.stage}{a.message ? `: ${a.message}` : ""}</span>
+          <span className="font-medium text-slate-700">{t.stages[a.stage] ?? a.stage}{msg ? `: ${msg}` : ""}</span>
           <span className="tabular-nums text-slate-500">{a.progress}%</span>
         </div>
         <ProgressBar value={a.progress} />
@@ -32,7 +39,7 @@ function Progress({ a }: { a: AnalysisDetail }) {
 }
 
 function ResultView() {
-  const { id } = useParams<{ id: string }>();
+  const id = useSearchParams().get("id") ?? "";
   const router = useRouter();
   const [a, setA] = useState<AnalysisDetail | null>(null);
   const [sections, setSections] = useState<SectionRow[]>([]);
@@ -61,17 +68,28 @@ function ResultView() {
   if (notFound) return <Notice tone="warn">Tahlil topilmadi yoki sizga tegishli emas.</Notice>;
   if (!a) return <Spinner />;
   if (a.status === "queued" || a.status === "running") return <Progress a={a} />;
-  if (a.status === "failed")
+  if (a.status === "failed") {
+    const code = (a.error ?? "").split(":")[0];
+    const resume = async () => {
+      await post(`/analyses/${a.id}/resume`);
+      load();
+    };
     return (
-      <Card title={t.result.failed}>
-        <p className="text-sm text-red-700">{a.error}</p>
-        <Link href="/" className="btn-secondary mt-4">{t.common.back}</Link>
+      <Card title={t.result.failed} subtitle={a.document_name ?? ""}>
+        <p className="text-sm text-red-700">{t.errors[code] ?? t.common.error}</p>
+        <p className="mt-1 text-xs text-slate-400">{a.error}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {a.file_available && <button className="btn-primary" onClick={resume}>{t.result.resume}</button>}
+          <Link href="/" className="btn-secondary">{t.common.back}</Link>
+        </div>
+        {a.file_available && <p className="mt-2 text-xs text-slate-500">{t.result.resumeHint}</p>}
       </Card>
     );
+  }
 
   const reanalyze = async (depth: string) => {
     const r = await post<AnalysisSummary>(`/documents/${a.document_id}/analyses`, { depth });
-    router.push(`/analyses/${r.id}`);
+    router.push(analysisHref(r.id));
   };
 
   const tabs = Object.entries(t.result.tabs) as [Tab, string][];
@@ -89,7 +107,7 @@ function ResultView() {
         <div className="flex flex-wrap gap-2">
           <a className="btn-primary" href={`/api/analyses/${a.id}/report?format=pdf`}>{t.result.downloadPdf}</a>
           <a className="btn-secondary" href={`/api/analyses/${a.id}/report?format=docx`}>{t.result.downloadDocx}</a>
-          {a.file_available && <Link className="btn-secondary" href={`/documents/${a.document_id}/structure?analysis=${a.id}`}>{t.result.editStructure}</Link>}
+          {a.file_available && <Link className="btn-secondary" href={structureHref(a.document_id, a.id)}>{t.result.editStructure}</Link>}
           {a.file_available && (
             <select className="btn-secondary" defaultValue="" onChange={(e) => e.target.value && reanalyze(e.target.value)} aria-label={t.result.reanalyze}>
               <option value="" disabled>{t.result.reanalyze}…</option>
@@ -133,7 +151,9 @@ function ResultView() {
 export default function Page() {
   return (
     <AppShell>
-      <ResultView />
+      <Suspense fallback={<Spinner />}>
+        <ResultView />
+      </Suspense>
     </AppShell>
   );
 }
