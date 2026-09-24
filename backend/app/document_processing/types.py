@@ -25,6 +25,9 @@ class ExtractedDocument:
     is_scanned: bool = False
     ocr_used: bool = False
     warnings: list[str] = field(default_factory=list)
+    # Text removed during extraction because it was invisible to a reader
+    # (white/hidden/tiny font). Reported as a technical-trick warning.
+    hidden_fragments: list[dict] = field(default_factory=list)
 
     @property
     def text_blocks(self) -> list[Block]:

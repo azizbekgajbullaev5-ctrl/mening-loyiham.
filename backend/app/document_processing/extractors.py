@@ -73,6 +73,7 @@ def extract_docx(data: bytes) -> ExtractedDocument:
         raise ExtractionError("parse_error", f"Could not parse DOCX: {exc}") from exc
 
     blocks: list[Block] = []
+    hidden: list[dict] = []
     page = 1
     saw_page_marker = False
     for child in document.element.body.iterchildren():
@@ -86,7 +87,7 @@ def extract_docx(data: bytes) -> ExtractedDocument:
             if before_text or after_text:
                 saw_page_marker = True
             page += before_text
-            text = collapse_ws(para.text)
+            text = collapse_ws(_visible_paragraph_text(para, hidden, page))
             page_after = page + after_text
             if not text:
                 page = page_after
@@ -136,7 +137,50 @@ def extract_docx(data: bytes) -> ExtractedDocument:
         pages_estimated = True
         _assign_estimated_pages(blocks, page_count)
         warnings.append("docx_pages_estimated")
-    return ExtractedDocument("docx", blocks, page_count, pages_estimated=pages_estimated, warnings=warnings)
+    return ExtractedDocument("docx", blocks, page_count, pages_estimated=pages_estimated, warnings=warnings, hidden_fragments=hidden[:500])
+
+
+_WHITE = {"FFFFFF", "FFFFFE", "FEFEFE", "FDFDFD"}
+
+
+def _visible_paragraph_text(para, hidden: list[dict], page: int) -> str:
+    """Paragraph text without runs a reader cannot see (white, hidden, <=2pt)."""
+    from docx.text.run import Run
+
+    parts: list[str] = []
+    removed = False
+    runs = [Run(r, para) for r in para._p.iter(W_NS + "r") if not any(a.tag in (W_NS + "del", W_NS + "moveFrom") for a in r.iterancestors())]
+    for run in runs:
+        t = run.text
+        if not t:
+            continue
+        reason = None
+        rpr = run._element.rPr
+        if rpr is not None:
+            if rpr.find(W_NS + "vanish") is not None or rpr.find(W_NS + "specVanish") is not None:
+                reason = "hidden"
+            col = rpr.find(W_NS + "color")
+            if col is not None and (col.get(W_NS + "val") or "").upper() in _WHITE:
+                reason = reason or "white"
+            sz = rpr.find(W_NS + "sz")
+            try:
+                if sz is not None and int(sz.get(W_NS + "val")) <= 4:  # half-points: <= 2pt
+                    reason = reason or "tiny"
+            except (TypeError, ValueError):
+                pass
+        if reason and t.strip():
+            hidden.append({"page": page, "reason": reason, "chars": len(t), "sample": t.strip()[:80]})
+            removed = True
+            parts.append(" ")
+            continue
+        parts.append(t)
+    if not runs:
+        return para.text
+    joined = "".join(parts)
+    # hyperlinks / fields are not in para.runs: fall back to full text when runs miss content
+    if removed or joined.strip():
+        return joined
+    return para.text
 
 
 def _count_page_breaks(p_elem) -> tuple[int, int]:
@@ -203,6 +247,7 @@ def extract_pdf(
     page_count = pdf.page_count
     raw_pages: list[list[dict]] = []
     scanned_pages: list[int] = []
+    hidden: list[dict] = []
     for pno in range(page_count):
         page = pdf[pno]
         height = page.rect.height or 1
@@ -212,10 +257,17 @@ def extract_pdf(
                 continue
             lines, sizes, bold_chars, chars = [], [], 0, 0
             for line in blk["lines"]:
-                spans = [sp for sp in line["spans"] if sp["text"].strip()]
+                visible = []
+                for sp in line["spans"]:
+                    if sp["text"].strip() and (sp.get("color") in _PDF_WHITE or sp["size"] < 2.0):
+                        hidden.append({"page": pno + 1, "reason": "white" if sp.get("color") in _PDF_WHITE else "tiny",
+                                       "chars": len(sp["text"]), "sample": sp["text"].strip()[:80]})
+                        continue
+                    visible.append(sp)
+                spans = [sp for sp in visible if sp["text"].strip()]
                 if not spans:
                     continue
-                lines.append("".join(sp["text"] for sp in line["spans"]))
+                lines.append("".join(sp["text"] for sp in visible))
                 for sp in spans:
                     n = len(sp["text"].strip())
                     sizes.append((sp["size"], n))
@@ -302,8 +354,12 @@ def extract_pdf(
             )
     blocks = _merge_split_pdf_paragraphs(blocks)
     return ExtractedDocument(
-        "pdf", blocks, page_count, pages_estimated=False, is_scanned=is_scanned, ocr_used=ocr_used, warnings=warnings
+        "pdf", blocks, page_count, pages_estimated=False, is_scanned=is_scanned, ocr_used=ocr_used, warnings=warnings,
+        hidden_fragments=hidden[:500],
     )
+
+
+_PDF_WHITE = {0xFFFFFF, 0xFEFEFE, 0xFDFDFD}
 
 
 def _join_pdf_lines(lines: list[str]) -> str:

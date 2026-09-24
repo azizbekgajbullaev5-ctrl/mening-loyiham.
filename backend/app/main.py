@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import analyses, auth, documents, system
+from app.api import analyses, auth, corpus, documents, system
 from app.core.config import get_settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -29,6 +29,10 @@ async def lifespan(_: FastAPI):
 
         for aid in recover_interrupted():
             enqueue_analysis(aid)
+    if s.TASK_MODE == "thread":
+        from app.plagiarism import jobs as corpus_jobs
+
+        corpus_jobs.recover()
     from app.tasks.maintenance import start_periodic_cleanup
 
     start_periodic_cleanup()
@@ -62,7 +66,7 @@ def create_app() -> FastAPI:
             response.headers.setdefault("Cache-Control", "no-store")
         return response
 
-    for r in (auth.router, documents.router, analyses.router, system.router):
+    for r in (auth.router, documents.router, analyses.router, corpus.router, system.router):
         app.include_router(r, prefix=s.API_PREFIX)
 
     # Bundled web UI (static export of the Next.js frontend). Lets the app run from a

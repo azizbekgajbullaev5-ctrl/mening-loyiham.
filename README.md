@@ -8,6 +8,11 @@ It analyzes academic documents (DOCX / PDF / TXT, Uzbek-Latin / Russian / Englis
 
 * **AI-likelihood** — a probabilistic estimate of AI-like writing characteristics, per passage, section and
   chapter, with a LOW / MEDIUM / HIGH confidence label and an explanation;
+* **plagiarism (Antiplagiat-style)** — originality / borrowing / citation percentages against a reference
+  corpus (bulk folder upload, harvester for OJS / OpenAlex / CORE / Crossref / CyberLeninka), your own
+  documents and, optionally, the internet via Brave Search; with Latin↔Cyrillic transliteration, paraphrase
+  detection, citation/reference exclusion and hidden-text / homoglyph warnings — see
+  [`docs/plagiarism.md`](docs/plagiarism.md);
 * **similarity** — a *separate* measurement: internal repetition, overlap with the user's own earlier
   documents, repeated phrases, paraphrase indicators, and (optionally) an external similarity service;
 * **style consistency** and **academic-writing indicators** — citations vs. references, heading numbering,
@@ -41,7 +46,7 @@ Pages (the workflow uploads `portal/` only).
 10. [Known limitations](#10-known-limitations)
 11. [Recommended next steps](#11-recommended-next-steps)
 
-Further reading: [`docs/methodology.md`](docs/methodology.md) · [`docs/architecture.md`](docs/architecture.md) ·
+Further reading: [`docs/plagiarism.md`](docs/plagiarism.md) · [`docs/methodology.md`](docs/methodology.md) · [`docs/architecture.md`](docs/architecture.md) ·
 [`docs/providers.md`](docs/providers.md)
 
 ---
@@ -159,6 +164,9 @@ cd backend
 DATABASE_URL=postgresql+psycopg2://aasa:<pw>@localhost:5432/aasa alembic upgrade head
 ```
 
+Migration `0002` adds the plagiarism tables (reference corpus, fingerprints, vectors, jobs, web cache,
+results) and makes the earliest user an admin.
+
 Create new migrations after model changes with
 `alembic revision --autogenerate -m "describe change"`. In development with SQLite the tables are created
 automatically on start.
@@ -185,6 +193,8 @@ and *"Local/document similarity analysis only."*, and every external provider is
 
 | Provider | Enable with | Used |
 |---|---|---|
+| Brave Search API (internet plagiarism check) | `BRAVE_API_KEY` (`BRAVE_PRICE_PER_1000_USD`, `WEB_MAX_QUERIES`) | only when the user ticks it and confirms the shown price |
+| OpenAlex / Crossref / CORE / OJS / CyberLeninka | `OPENALEX_EMAIL`, `CROSSREF_MAILTO`, `CORE_API_KEY`, `HARVEST_OJS_URLS`, `HARVEST_QUERIES` | corpus harvester (admin) |
 | Generic AI-detection API | `AI_DETECTOR_API_URL` + `AI_DETECTOR_API_KEY` (+ score field/scale) | DEEP analysis, top suspicious passages |
 | Generic similarity/plagiarism API | `SIMILARITY_API_URL` + `SIMILARITY_API_KEY` | DEEP analysis, all body passages (batched) |
 | LLM-assisted stylistic review (Claude) | `LLM_REVIEW_ENABLED=true` + `ANTHROPIC_API_KEY` (`ANTHROPIC_MODEL`, default `claude-haiku-4-5` — the lightest model; set e.g. `claude-opus-5` for stronger review) | DEEP analysis, top suspicious passages |
@@ -214,6 +224,11 @@ characteristics and explanation; filter by chapter, minimum score, confidence, a
 (matches and repeated phrases), *Akademik yozuv*, *Hujjat* (document viewer with highlighted passages) and
 *Metodologiya*.
 
+**Plagiarism check** — tick *Ma'lumotnoma bazasi bilan solishtirish* (on by default) and optionally *Internet
+tekshiruvi (Brave Search)*; for the internet check the price is shown and must be confirmed. The *Plagiat* tab
+shows originality / borrowing / citation, sources and the coloured text; *Antiplagiat hisobot (PDF)*
+downloads the report. Admins fill the corpus on *Ma'lumotnoma bazasi* (folder upload, harvester).
+
 **Correcting the structure** — *Tuzilmani tuzatish* lists the paragraphs; change which ones are headings and
 their type/level, then save to re-run the analysis with the corrected structure.
 
@@ -229,7 +244,7 @@ reports. `DELETE /api/documents/{id}/file` deletes only the original file and ke
 
 ```bash
 cd backend
-pytest                                   # 102 tests, SQLite, ~1 minute
+pytest                                   # 124 tests, SQLite, ~1–2 minutes
 TEST_DATABASE_URL=postgresql+psycopg2://aasa:aasa@localhost:5432/aasa_test pytest   # same suite on PostgreSQL
 
 cd frontend
@@ -255,7 +270,9 @@ position, bundled UI served by the backend, SQLite WAL, launcher key generation)
 | Language detection (uz / ru / en) | local |
 | AI-likelihood estimate | **local stylometric analysis** (per-language profiles) |
 | Similarity: internal, own documents, repeated phrases, paraphrase indicators | local |
-| Similarity against internet / publication databases | **external only** (not performed unless configured) |
+| Plagiarism vs reference corpus, own documents, paraphrase, hidden-text checks | local |
+| Corpus harvesting (OJS, OpenAlex, CORE, Crossref, CyberLeninka) | external, admin-started |
+| Internet plagiarism check | **external** (Brave Search; only after the user confirms the price) |
 | Additional AI-detector scores / LLM review | **external only** (optional, DEEP analysis) |
 | Academic-writing and style checks, reports | local |
 
@@ -267,15 +284,17 @@ position, bundled UI served by the backend, SQLite WAL, launcher key generation)
 * No validated Uzbek AI-text corpus exists; Uzbek confidence is therefore capped at *Medium*. Uzbek Cyrillic
   is detected but not supported by a dedicated module (results fall back to generic features with *Low*
   confidence).
-* Without an external similarity API, there is **no internet or database plagiarism check**; cross-document
-  comparison covers only the same user's own uploads.
+* The plagiarism result covers only the sources actually checked (your corpus, own documents and, if used,
+  pages found by Brave). Paraphrase thresholds are heuristic. The live Brave / OpenAlex / CORE / Crossref /
+  OJS / CyberLeninka APIs and the model2vec download were tested only with mocked responses in development.
 * DOCX page numbers come from Word's saved page-break markers; when a file has none (e.g. generated
   documents), pages are estimated (~280 words/page) and labelled as estimated. TXT pages are estimated
   unless the file contains form feeds.
 * PDF heading detection relies on font size/bold; unusual layouts may need manual structure correction.
   Multi-column PDFs and complex tables are extracted as plain text blocks.
 * OCR quality depends on the scan; OCR text is never given *High* confidence.
-* The "paraphrase" indicator finds meaning-level overlap *inside the document* only.
+* The similarity tab's "paraphrase" indicator finds overlap *inside the document*; paraphrase against other
+  sources is in the *Plagiat* tab.
 * Interface language is Uzbek; reports are available in Uzbek and English. Russian/English UI dictionaries
   are not yet written.
 * The Docker images were written and the compose file validated, but they could not be built in the

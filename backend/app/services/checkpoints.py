@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from app.core.security import get_fernet
 from app.document_processing.types import Block, ExtractedDocument
 
-EXTRACT_VERSION = "v1"
+EXTRACT_VERSION = "v2"
 
 
 def _dir() -> Path:
@@ -65,6 +65,7 @@ def dump_extracted(doc: ExtractedDocument) -> dict:
         "is_scanned": doc.is_scanned,
         "ocr_used": doc.ocr_used,
         "warnings": doc.warnings,
+        "hidden": doc.hidden_fragments,
         "blocks": [[b.text, b.kind, b.page, b.heading_level, b.style, b.is_ocr] for b in doc.blocks],
     }
 
@@ -74,5 +75,6 @@ def restore_extracted(data: dict | None) -> ExtractedDocument | None:
         return None
     blocks = [Block(i, t, k, p, h, s, o) for i, (t, k, p, h, s, o) in enumerate(data["blocks"])]
     return ExtractedDocument(
-        data["file_type"], blocks, data["page_count"], data["pages_estimated"], data["is_scanned"], data["ocr_used"], data["warnings"]
+        data["file_type"], blocks, data["page_count"], data["pages_estimated"], data["is_scanned"], data["ocr_used"], data["warnings"],
+        data.get("hidden", []),
     )

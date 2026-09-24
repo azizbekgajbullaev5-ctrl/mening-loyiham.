@@ -13,8 +13,9 @@ from app.analyzers.languages.registry import PROFILES
 from app.analyzers.text_utils import normalize, words
 from app.document_processing.types import Block
 
+TITLE_PAGE_MAX_BLOCKS = 15
 SECTION_KINDS = (
-    "title", "toc", "abstract", "keywords", "introduction", "literature_review", "methodology", "results",
+    "body", "title", "toc", "abstract", "keywords", "introduction", "literature_review", "methodology", "results",
     "discussion", "conclusion", "references", "appendix", "chapter", "section", "subsection", "heading",
     "front_matter",
 )
@@ -181,9 +182,23 @@ class Section:
         return self.kind in AI_EXCLUDED_KINDS
 
 
-def build_sections(headings: list[Heading | dict], n_blocks: int) -> list[Section]:
+def build_sections(headings: list[Heading | dict], n_blocks: int, blocks: list[Block] | None = None) -> list[Section]:
     hs = [h if isinstance(h, Heading) else Heading(**{k: h[k] for k in ("paragraph_index", "kind", "level", "title")}, number=h.get("number")) for h in headings]
     hs = sorted(hs, key=lambda h: h.paragraph_index)
+    # A title page is short. If a title heading is followed by a long run of text with no
+    # other heading, that text is the document body, not part of the (excluded) title page.
+    for i, h in enumerate(list(hs)):
+        if h.kind == "title":
+            nxt = hs[i + 1].paragraph_index if i + 1 < len(hs) else n_blocks
+            body_at = None
+            if blocks is not None:
+                # title pages hold short lines (author, institution, city/year); a real paragraph starts the body
+                body_at = next((b.index for b in blocks[h.paragraph_index + 1 : nxt] if len(words(b.text)) > 40), None)
+            elif nxt - h.paragraph_index > TITLE_PAGE_MAX_BLOCKS:
+                body_at = h.paragraph_index + 1
+            if body_at is not None:
+                hs.insert(i + 1, Heading(body_at, "body", 1, ""))
+            break
     sections: list[Section] = []
     if not hs or hs[0].paragraph_index > 0:
         first = hs[0].paragraph_index if hs else n_blocks

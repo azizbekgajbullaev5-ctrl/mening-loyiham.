@@ -89,6 +89,40 @@ class Settings(BaseSettings):
     LLM_REVIEW_ENABLED: bool = False  # LLM-assisted stylistic review is opt-in
     LLM_RPM: int = 20
 
+    # --- plagiarism: reference corpus, paraphrase, internet ---
+    ADMIN_EMAILS: str = ""  # comma list; the first registered user is always admin
+    CORPUS_MAX_UPLOAD_MB: int = 60
+    EMBEDDING_BACKEND: Literal["auto", "model2vec", "hash"] = "auto"
+    EMBEDDING_MODEL: str = "minishlab/potion-multilingual-128M"
+    MODEL_CACHE_DIR: Path = BASE_DIR / "data" / "models"
+    PARAPHRASE_THRESHOLD_MODEL: float = 0.88  # cosine, model2vec vectors
+    PARAPHRASE_THRESHOLD_HASH: float = 0.80  # cosine, hash vectors: paraphrase ~0.84, same-topic text <=0.74 in tests
+    PARAPHRASE_CANDIDATE_DOCS: int = 30
+    PLAGIARISM_MIN_SOURCE_WORDS: int = 12  # a source must cover at least this many words
+
+    BRAVE_API_KEY: SecretStr = SecretStr("")
+    BRAVE_API_URL: str = "https://api.search.brave.com/res/v1/web/search"
+    BRAVE_PRICE_PER_1000_USD: float = 5.0  # check your Brave plan; used for the estimate only
+    BRAVE_RPS: float = 1.0
+    WEB_MAX_QUERIES: int = 40
+    WEB_WORDS_PER_QUERY: int = 1500
+    WEB_RESULTS_PER_QUERY: int = 3
+    WEB_MAX_PAGE_MB: int = 5
+    WEB_RESPECT_ROBOTS: bool = True
+    WEB_PAGE_CACHE_DAYS: int = 30
+
+    # harvesting open sources into the reference corpus
+    HARVEST_OJS_URLS: str = ""  # comma list of OJS journal base URLs (…/index.php/<journal>)
+    HARVEST_QUERIES: str = ""  # comma list of search queries for OpenAlex/CORE/Crossref/CyberLeninka
+    HARVEST_MAX_PER_SOURCE: int = 50
+    HARVEST_FETCH_FULLTEXT: bool = True
+    HARVEST_MIN_TEXT_CHARS: int = 400
+    HARVEST_RPS: float = 1.0
+    OPENALEX_EMAIL: str = ""  # "polite pool" contact
+    OPENALEX_FILTER: str = "is_oa:true"
+    CORE_API_KEY: SecretStr = SecretStr("")
+    CROSSREF_MAILTO: str = ""
+
     PROVIDER_TIMEOUT_SECONDS: float = 60.0
     PROVIDER_MAX_RETRIES: int = 3
 
@@ -99,8 +133,16 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     @property
+    def admin_emails(self) -> set[str]:
+        return {e.strip().lower() for e in self.ADMIN_EMAILS.split(",") if e.strip()}
+
+    @property
     def max_upload_bytes(self) -> int:
         return self.MAX_UPLOAD_MB * 1024 * 1024
+
+
+def csv_list(value: str) -> list[str]:
+    return [x.strip() for x in value.replace("\n", ",").split(",") if x.strip()]
 
 
 @lru_cache

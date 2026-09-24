@@ -4,6 +4,7 @@ export interface User {
   id: string;
   email: string;
   full_name: string;
+  is_admin?: boolean;
 }
 
 export interface AnalysisSummary {
@@ -14,7 +15,7 @@ export interface AnalysisSummary {
   document_name: string | null;
   doc_type: string | null;
   depth: "quick" | "standard" | "deep";
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "completed" | "failed" | "awaiting_confirmation";
   progress: number;
   stage: string;
   message: string;
@@ -28,6 +29,113 @@ export interface AnalysisSummary {
   ai_likelihood: number | null;
   ai_confidence: Confidence | null;
   similarity_overall: number | null;
+  corpus_check?: boolean;
+  web_check?: boolean;
+  web_estimate?: WebEstimate | null;
+  originality?: number | null;
+  borrowing?: number | null;
+  citation?: number | null;
+}
+
+export interface WebEstimate {
+  words: number;
+  queries: number;
+  max_pages: number;
+  price_per_1000_usd: number;
+  cost_usd: number;
+  configured: boolean;
+}
+
+export interface PlagiarismSource {
+  index: number;
+  module: "corpus" | "own" | "web";
+  module_label: string;
+  title: string;
+  url: string | null;
+  authors: string;
+  year: number | null;
+  doc_kind: string | null;
+  share_text: number;
+  share_report: number;
+  words: number;
+  paraphrase_words: number;
+  max_similarity: number | null;
+}
+
+export interface IntegrityItem {
+  code: string;
+  label: string;
+  severity: "high" | "medium" | "low";
+  count: number;
+  examples?: string[];
+  pages?: number[];
+}
+
+export interface Plagiarism {
+  checked_words: number;
+  excluded_words: number;
+  originality: number;
+  borrowing: number;
+  citation: number;
+  paraphrase_share: number;
+  sources: PlagiarismSource[];
+  spans: [number, number, number, number, "b" | "p" | "c"][];
+  integrity: { suspicious: boolean; items: IntegrityItem[] };
+  modules: {
+    corpus?: boolean;
+    own?: boolean;
+    web?: boolean;
+    paraphrase?: { backend: string; chunks: number; matches: number; threshold?: number } | false;
+    corpus_documents?: number;
+    web_stats?: { queries_used: number; fetched_pages: number; cached_pages: number; failed_pages: number; cost_usd: number; errors: string[] };
+  };
+  exclusions: Record<string, number>;
+}
+
+export interface CorpusStats {
+  documents: number;
+  fingerprints: number;
+  vectors: number;
+  words: number;
+  by_kind: Record<string, number>;
+  by_source: Record<string, number>;
+  by_language: Record<string, number>;
+  database_bytes: number | null;
+  embedding_backend: string;
+}
+
+export interface RefDocument {
+  id: string;
+  title: string;
+  authors: string;
+  year: number | null;
+  doc_kind: string;
+  source_type: string;
+  source_url: string | null;
+  doi: string | null;
+  language: string;
+  folder: string;
+  filename: string;
+  word_count: number;
+  fingerprint_count: number;
+  vector_count: number;
+  fulltext: boolean;
+  created_at: string;
+}
+
+export interface CorpusJob {
+  id: string;
+  kind: "ingest" | "harvest";
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  total: number;
+  done: number;
+  added: number;
+  skipped: number;
+  failed: number;
+  message: string;
+  log: string[];
+  created_at: string;
+  params: Record<string, unknown>;
 }
 
 export interface Version {

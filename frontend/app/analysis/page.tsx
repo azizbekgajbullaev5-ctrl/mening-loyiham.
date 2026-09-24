@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChaptersCharts } from "@/components/Charts";
+import { PlagiarismPanel } from "@/components/PlagiarismPanel";
 import { AcademicPanel, ChaptersTable, DocumentViewer, MethodPanel, OverviewPanel, PassagesPanel, SimilarityPanel } from "@/components/ResultPanels";
 import { Card, Notice, ProgressBar, Spinner, StatusBadge } from "@/components/ui";
 import { get, post } from "@/lib/api";
@@ -29,10 +30,39 @@ function Progress({ a }: { a: AnalysisDetail }) {
         </div>
         <ProgressBar value={a.progress} />
         <ol className="grid gap-1 text-xs text-slate-500 sm:grid-cols-3">
-          {["extracting", "language", "segmenting", "ai_analysis", "similarity", "style", "academic", "aggregating"].map((s) => (
+          {["extracting", "language", "segmenting", "ai_analysis", "similarity", "plagiarism", "style", "academic", "aggregating"].map((s) => (
             <li key={s} className={a.stage === s ? "font-semibold text-brand-700" : ""}>• {t.stages[s]}</li>
           ))}
         </ol>
+      </div>
+    </Card>
+  );
+}
+
+function WebConfirm({ a, onDone }: { a: AnalysisDetail; onDone: () => void }) {
+  const e = a.web_estimate;
+  const [busy, setBusy] = useState(false);
+  const go = async (web: boolean) => {
+    setBusy(true);
+    await post(`/analyses/${a.id}/confirm`, { web_check: web });
+    onDone();
+  };
+  return (
+    <Card title={t.web.confirmTitle} subtitle={a.document_name ?? ""}>
+      {e ? (
+        <dl className="grid gap-4 sm:grid-cols-4">
+          <div><dt className="text-xs text-slate-500">{t.result.words}</dt><dd className="text-xl font-semibold tabular-nums">{e.words.toLocaleString("uz-UZ")}</dd></div>
+          <div><dt className="text-xs text-slate-500">{t.web.queries}</dt><dd className="text-xl font-semibold tabular-nums">{e.queries}</dd></div>
+          <div><dt className="text-xs text-slate-500">{t.web.pages}</dt><dd className="text-xl font-semibold tabular-nums">{e.max_pages}</dd></div>
+          <div><dt className="text-xs text-slate-500">{t.web.cost}</dt><dd className="text-xl font-semibold tabular-nums">≈ ${e.cost_usd.toFixed(3)}</dd>
+            <dd className="text-xs text-slate-500">{t.web.price}: ${e.price_per_1000_usd}</dd></div>
+        </dl>
+      ) : null}
+      <p className="mt-3 text-xs text-slate-500">{t.web.note}</p>
+      {e && !e.configured && <div className="mt-3"><Notice tone="warn">{t.web.notConfigured}</Notice></div>}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button className="btn-primary" disabled={busy || !e?.configured} onClick={() => go(true)}>{t.web.confirm}</button>
+        <button className="btn-secondary" disabled={busy} onClick={() => go(false)}>{t.web.skip}</button>
       </div>
     </Card>
   );
@@ -43,7 +73,7 @@ function ResultView() {
   const router = useRouter();
   const [a, setA] = useState<AnalysisDetail | null>(null);
   const [sections, setSections] = useState<SectionRow[]>([]);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>("plagiarism");
   const [notFound, setNotFound] = useState(false);
 
   const load = useCallback(async () => {
@@ -67,6 +97,7 @@ function ResultView() {
 
   if (notFound) return <Notice tone="warn">Tahlil topilmadi yoki sizga tegishli emas.</Notice>;
   if (!a) return <Spinner />;
+  if (a.status === "awaiting_confirmation") return <WebConfirm a={a} onDone={load} />;
   if (a.status === "queued" || a.status === "running") return <Progress a={a} />;
   if (a.status === "failed") {
     const code = (a.error ?? "").split(":")[0];
@@ -132,6 +163,7 @@ function ResultView() {
         </ul>
       </nav>
 
+      {tab === "plagiarism" && <PlagiarismPanel analysisId={a.id} documentId={a.document_id} />}
       {tab === "overview" && a.result && (
         <div className="space-y-6">
           <OverviewPanel a={a} />
