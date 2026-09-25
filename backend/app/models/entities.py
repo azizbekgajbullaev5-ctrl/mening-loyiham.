@@ -23,6 +23,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -111,7 +112,7 @@ class Analysis(Base):
     )
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     depth: Mapped[str] = mapped_column(String(10), default="standard")
-    status: Mapped[str] = mapped_column(String(12), default="queued", index=True)
+    status: Mapped[str] = mapped_column(String(24), default="queued", index=True)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     stage: Mapped[str] = mapped_column(String(40), default="queued")
     message: Mapped[str] = mapped_column(String(300), default="")
@@ -125,6 +126,8 @@ class Analysis(Base):
     corpus_check: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     web_check: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     web_estimate: Mapped[dict] = mapped_column(JSON, default=dict)
+    # enabled plagiarism modules (keys of app.plagiarism.modules.MODULES); empty = derived from corpus_check/web_check
+    check_modules: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'"))
 
     document: Mapped[Document] = relationship(back_populates="analyses")
     version: Mapped[DocumentVersion | None] = relationship()
@@ -432,4 +435,9 @@ class WebPageCache(Base):
     status: Mapped[str] = mapped_column(String(20), default="ok")
     word_count: Mapped[int] = mapped_column(Integer, default=0)
     hashes: Mapped[bytes] = mapped_column(LargeBinary, default=b"")  # int64 array of all shingle hashes
+    module: Mapped[str] = mapped_column(String(20), default="web", server_default="web")
+    language: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # chunk embeddings (float16) for paraphrase / translation matching; key = backend id|dims
+    vectors: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    vector_backend: Mapped[str | None] = mapped_column(String(80), nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

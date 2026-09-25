@@ -32,9 +32,26 @@ export interface AnalysisSummary {
   corpus_check?: boolean;
   web_check?: boolean;
   web_estimate?: WebEstimate | null;
+  check_modules?: string[];
   originality?: number | null;
   borrowing?: number | null;
   citation?: number | null;
+}
+
+export interface ModuleEstimate {
+  key: string;
+  label: string;
+  kind: "local" | "online";
+  description: string;
+  available: boolean;
+  reason: string;
+  paid: boolean;
+  queries: number;
+  requests: number;
+  downloads: number;
+  cost_usd: number;
+  seconds: number;
+  sources?: string[];
 }
 
 export interface WebEstimate {
@@ -44,11 +61,28 @@ export interface WebEstimate {
   price_per_1000_usd: number;
   cost_usd: number;
   configured: boolean;
+  modules?: Record<string, ModuleEstimate>;
+  selected?: string[];
+  total_cost_usd?: number;
+  total_requests?: number;
+  total_seconds?: number;
+  note?: string;
+}
+
+export interface ModuleCheck {
+  key: string;
+  label: string;
+  state: "checked" | "off" | "unavailable" | "error";
+  reason?: string;
+  sources_found?: number;
+  errors?: string[];
+  excluded_words?: number;
+  stats?: Record<string, unknown>;
 }
 
 export interface PlagiarismSource {
   index: number;
-  module: "corpus" | "own" | "web";
+  module: string;
   module_label: string;
   title: string;
   url: string | null;
@@ -59,6 +93,7 @@ export interface PlagiarismSource {
   share_report: number;
   words: number;
   paraphrase_words: number;
+  translation_words?: number;
   max_similarity: number | null;
 }
 
@@ -79,7 +114,7 @@ export interface Plagiarism {
   citation: number;
   paraphrase_share: number;
   sources: PlagiarismSource[];
-  spans: [number, number, number, number, "b" | "p" | "c"][];
+  spans: [number, number, number, number, "b" | "p" | "t" | "c"][];
   integrity: { suspicious: boolean; items: IntegrityItem[] };
   modules: {
     corpus?: boolean;
@@ -89,6 +124,13 @@ export interface Plagiarism {
     corpus_documents?: number;
     web_stats?: WebStats;
     duplicates?: DuplicateDoc[];
+    online_stats?: Record<string, WebStats>;
+    checks?: ModuleCheck[];
+    checked_count?: number;
+    module_total?: number;
+    translation_share?: number;
+    templates?: { occurrences: number; words: number; excluded_from_borrowing: number };
+    cost_usd?: number;
   };
   exclusions: Record<string, number>;
 }
@@ -100,6 +142,8 @@ export interface WebPage {
   cached: boolean;
   words: number;
   source_index?: number | null;
+  source_url?: string;
+  module?: string;
 }
 
 export interface WebStats {
@@ -113,7 +157,9 @@ export interface WebStats {
   cost_usd: number;
   errors: string[];
   pages?: WebPage[];
-  query_log?: { q: string; results: number | null; error?: string }[];
+  query_log?: { q: string; results: number | null; error?: string; source?: string }[];
+  requests?: number;
+  per_source?: Record<string, { requests: number; results: number; errors: number }>;
 }
 
 export interface DuplicateDoc {

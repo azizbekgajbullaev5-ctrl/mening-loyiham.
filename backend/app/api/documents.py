@@ -19,6 +19,7 @@ from app.document_processing.validation import ValidationError, validate_upload
 from app.models import Analysis, Document, DocumentFingerprint, DocumentVersion, User
 from app.services import checkpoints, storage
 from app.services.audit import audit
+from app.plagiarism import modules as plag_modules
 from app.plagiarism import web as webcheck
 from app.plagiarism.textnorm import display_text
 from app.services.pipeline import prepare
@@ -43,6 +44,19 @@ async def _read_limited(f: UploadFile, limit: int) -> bytes:
     return b"".join(chunks)
 
 
+def apply_modules(db: Session, analysis: Analysis, keys: list[str], word_count) -> bool:
+    """Set the enabled modules. Returns True when the analysis must wait for the user's confirmation
+    (an online module is enabled): requests and approximate price per module are shown first."""
+    analysis.check_modules = keys
+    analysis.corpus_check, analysis.web_check = "corpus" in keys, "web" in keys
+    online = [k for k in keys if k in plag_modules.ONLINE and plag_modules.availability(k, db)[0]]
+    if not online:
+        return False
+    analysis.status, analysis.stage = "awaiting_confirmation", "awaiting_confirmation"
+    analysis.web_estimate = plag_modules.estimate(word_count(), keys, db)
+    return True
+
+
 @router.post("", status_code=201)
 async def upload(
     request: Request,
@@ -52,6 +66,7 @@ async def upload(
     keep_for_similarity: bool = Form(True),
     corpus_check: bool = Form(True),
     web_check: bool = Form(False),
+    modules: str | None = Form(None),  # comma-separated module keys; overrides corpus_check/web_check
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -82,17 +97,14 @@ async def upload(
         version = DocumentVersion(document_id=doc.id, version_no=1)
         db.add(version)
         db.flush()
-        analysis = Analysis(document_id=doc.id, version_id=version.id, owner_id=user.id, depth=depth,
-                            corpus_check=corpus_check, web_check=web_check)
-        if web_check:
-            # internet check costs money: show the estimate and wait for the user's confirmation
-            analysis.status, analysis.stage = "awaiting_confirmation", "awaiting_confirmation"
-            analysis.web_estimate = webcheck.estimate(webcheck.quick_word_count(v.file_type, data))
+        analysis = Analysis(document_id=doc.id, version_id=version.id, owner_id=user.id, depth=depth)
+        keys = plag_modules.normalize(modules.split(",")) if modules is not None else plag_modules.from_legacy(corpus_check, web_check)
+        waiting = apply_modules(db, analysis, keys, lambda: webcheck.quick_word_count(v.file_type, data))
         db.add(analysis)
         db.flush()
         audit(db, "document_uploaded", user.id, "document", doc.id, client_ip(request), size=len(data), type=v.file_type)
         created.append((doc, analysis))
-        if not web_check:
+        if not waiting:
             to_run.append(analysis.id)
     db.commit()
     for aid in to_run:
@@ -227,11 +239,13 @@ def put_structure(document_id: str, body: StructureIn, request: Request, user: U
     db.flush()
     audit(db, "structure_corrected", user.id, "document", d.id, client_ip(request), headings=len(body.headings))
     analysis = None
+    waiting = False
     if body.reanalyze:
         analysis = Analysis(document_id=d.id, version_id=v.id, owner_id=user.id, depth=body.depth)
+        waiting = apply_modules(db, analysis, _previous_modules(d), lambda: v.word_count or 0)
         db.add(analysis)
     db.commit()
-    if analysis:
+    if analysis and not waiting:
         enqueue_analysis(analysis.id)
         db.refresh(analysis)
     return {"version_id": v.id, "analysis": analysis_summary(analysis) if analysis else None}
@@ -239,6 +253,12 @@ def put_structure(document_id: str, body: StructureIn, request: Request, user: U
 
 class ReanalyzeIn(BaseModel):
     depth: Depth = "standard"
+    modules: list[str] | None = None  # default: the modules of the previous analysis
+
+
+def _previous_modules(d: Document) -> list[str]:
+    last = d.analyses[-1] if d.analyses else None
+    return plag_modules.enabled_for(last) if last else plag_modules.default_modules()
 
 
 @router.post("/{document_id}/analyses", status_code=201)
@@ -248,9 +268,12 @@ def reanalyze(document_id: str, body: ReanalyzeIn, request: Request, user: User 
         raise HTTPException(410, "file_deleted")
     v = d.versions[-1] if d.versions else None
     a = Analysis(document_id=d.id, version_id=v.id if v else None, owner_id=user.id, depth=body.depth)
+    keys = plag_modules.normalize(body.modules) if body.modules is not None else _previous_modules(d)
+    waiting = apply_modules(db, a, keys, lambda: (v.word_count if v else 0) or 0)
     db.add(a)
-    audit(db, "analysis_requested", user.id, "document", d.id, client_ip(request), depth=body.depth)
+    audit(db, "analysis_requested", user.id, "document", d.id, client_ip(request), depth=body.depth, modules=keys)
     db.commit()
-    enqueue_analysis(a.id)
+    if not waiting:
+        enqueue_analysis(a.id)
     db.refresh(a)
     return analysis_summary(a)

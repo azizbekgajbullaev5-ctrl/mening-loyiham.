@@ -76,7 +76,7 @@ def _run_ingest(db, job: CorpusJob) -> None:
         if job.status == "cancelled":
             return
         try:
-            data = storage.load(it.storage_key)
+            data = storage.load(it.storage_key) if it.storage_key else _read_local(job, it)
             doc = extract(it.file_type, data)
             texts = corpus.body_texts(doc)
             title = next((b.text for b in doc.blocks[:5] if b.kind == "heading" and 3 <= len(b.text) <= 300), None) or it.filename.rsplit(".", 1)[0]
@@ -96,10 +96,29 @@ def _run_ingest(db, job: CorpusJob) -> None:
             job.failed += 1
             _log(job, f"! {it.filename}: {it.error}")
         finally:
-            storage.delete(it.storage_key)  # the original is never kept
+            if it.storage_key:
+                storage.delete(it.storage_key)  # the uploaded copy is never kept (local files are only read)
             it.storage_key = None
             job.done += 1
             db.commit()
+
+
+def _read_local(job: CorpusJob, it: CorpusJobItem) -> bytes:
+    """A file of a local-folder import: read in place (never copied, never deleted), validated like an upload."""
+    from pathlib import Path
+
+    from app.document_processing.validation import validate_upload
+
+    root = Path((job.params or {}).get("root", ""))
+    path = (root / it.folder / it.filename).resolve()
+    if root.resolve() not in path.parents:
+        raise ValueError("outside_folder")
+    s = get_settings()
+    if path.stat().st_size > s.CORPUS_MAX_UPLOAD_MB * 1024 * 1024:
+        raise ValueError("too_large")
+    data = path.read_bytes()
+    validate_upload(it.filename, data)  # signature, macros, zip bombs
+    return data
 
 
 def _run_harvest(db, job: CorpusJob) -> None:
@@ -145,6 +164,8 @@ def _ingest_item(db, job: CorpusJob, item, fulltext: bool, fetcher, min_chars: i
         return
     texts = [item.text]
     is_full = item.fulltext
+    if fulltext and not is_full and not item.pdf_url and callable(item.extra.get("resolve_pdf")):
+        item.pdf_url = item.extra["resolve_pdf"]()
     if fulltext and not is_full and item.pdf_url:
         try:
             ctype, data = fetcher.fetch_bytes(item.pdf_url)
@@ -172,3 +193,47 @@ def recover() -> None:
         ids = [j.id for j in db.scalars(select(CorpusJob).where(CorpusJob.status.in_(("queued", "running")))).all()]
     for jid in ids:
         enqueue(jid)
+
+
+def schedule_ojs_harvest(now: datetime | None = None) -> str | None:
+    """Queue an incremental OJS harvest when OJS_AUTO_HARVEST_HOURS have passed since the last one.
+    Already known articles are skipped by URL/DOI before anything else is downloaded."""
+    s = get_settings()
+    urls = csv_list(s.HARVEST_OJS_URLS)
+    if s.OJS_AUTO_HARVEST_HOURS <= 0 or not urls:
+        return None
+    now = now or datetime.now(UTC)
+    with SessionLocal() as db:
+        running = db.scalar(select(CorpusJob.id).where(CorpusJob.kind == "harvest", CorpusJob.status.in_(("queued", "running"))))
+        if running:
+            return None
+        last = db.scalars(select(CorpusJob).where(CorpusJob.kind == "harvest").order_by(CorpusJob.created_at.desc())).first()
+        if last is not None and "ojs" in (last.params or {}).get("sources", []):
+            at = last.created_at if last.created_at.tzinfo else last.created_at.replace(tzinfo=UTC)
+            if (now - at).total_seconds() < s.OJS_AUTO_HARVEST_HOURS * 3600:
+                return None
+        job = CorpusJob(kind="harvest", created_by=None, params={"sources": ["ojs"], "ojs_urls": urls, "limit": s.OJS_AUTO_HARVEST_LIMIT,
+                                                                  "fulltext": s.HARVEST_FETCH_FULLTEXT, "auto": True})
+        db.add(job)
+        db.commit()
+        jid = job.id
+    enqueue(jid)
+    return jid
+
+
+def start_ojs_scheduler() -> None:
+    s = get_settings()
+    if s.OJS_AUTO_HARVEST_HOURS <= 0 or not csv_list(s.HARVEST_OJS_URLS):
+        return
+
+    def loop() -> None:
+        import time
+
+        while True:
+            try:
+                schedule_ojs_harvest()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("OJS auto-harvest scheduling failed: %s", exc)
+            time.sleep(3600)
+
+    threading.Thread(target=loop, name="ojs-scheduler", daemon=True).start()

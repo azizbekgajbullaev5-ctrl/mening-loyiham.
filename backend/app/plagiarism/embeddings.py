@@ -130,3 +130,17 @@ def to_blob(v: np.ndarray) -> bytes:
 
 def from_blob(b: bytes, dims: int) -> np.ndarray:
     return np.frombuffer(b, dtype=np.float16).astype(np.float32).reshape(-1, dims)
+
+
+def expected_kind() -> str:
+    """'model2vec' | 'hash' | 'auto' (not decided yet) — without loading a model."""
+    if _backend is not None:
+        return "hash" if isinstance(_backend, HashBackend) else "model2vec"
+    s = get_settings()
+    if s.EMBEDDING_BACKEND in ("hash", "model2vec"):
+        return s.EMBEDDING_BACKEND
+    marker = Path(s.MODEL_CACHE_DIR) / "embedding_backend.txt"
+    try:
+        return (marker.read_text().strip() or "auto") if marker.exists() else "auto"
+    except OSError:
+        return "auto"

@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ChaptersCharts } from "@/components/Charts";
 import { PlagiarismPanel } from "@/components/PlagiarismPanel";
+import { ModulePicker, estimateTotals } from "@/components/ModulePicker";
 import { AcademicPanel, ChaptersTable, DocumentViewer, MethodPanel, OverviewPanel, PassagesPanel, SimilarityPanel } from "@/components/ResultPanels";
 import { Card, Notice, ProgressBar, Spinner, StatusBadge } from "@/components/ui";
 import { get, post } from "@/lib/api";
@@ -34,6 +35,38 @@ function Progress({ a }: { a: AnalysisDetail }) {
             <li key={s} className={a.stage === s ? "font-semibold text-brand-700" : ""}>• {t.stages[s]}</li>
           ))}
         </ol>
+      </div>
+    </Card>
+  );
+}
+
+function ModulesConfirm({ a, onDone }: { a: AnalysisDetail; onDone: () => void }) {
+  const e = a.web_estimate!;
+  const mods = Object.values(e.modules ?? {});
+  const [selected, setSelected] = useState<string[]>(a.check_modules ?? e.selected ?? []);
+  const [busy, setBusy] = useState(false);
+  const tot = estimateTotals(mods, selected);
+  const go = async (keys: string[]) => {
+    setBusy(true);
+    await post(`/analyses/${a.id}/confirm`, { modules: keys });
+    onDone();
+  };
+  const local = selected.filter((k) => e.modules?.[k]?.kind === "local");
+  return (
+    <Card title={t.modules.confirmTitle} subtitle={a.document_name ?? ""}>
+      <dl className="mb-4 grid gap-4 sm:grid-cols-4">
+        <div><dt className="text-xs text-slate-500">{t.result.words}</dt><dd className="text-xl font-semibold tabular-nums">{e.words.toLocaleString("uz-UZ")}</dd></div>
+        <div><dt className="text-xs text-slate-500">{t.modules.requests}</dt><dd className="text-xl font-semibold tabular-nums">{tot.requests}</dd></div>
+        <div><dt className="text-xs text-slate-500">{t.modules.time}</dt><dd className="text-xl font-semibold tabular-nums">≈ {Math.max(1, Math.round(tot.seconds / 60))} daq</dd></div>
+        <div><dt className="text-xs text-slate-500">{t.modules.cost}</dt>
+          <dd className="text-xl font-semibold tabular-nums" data-testid="total-cost">{tot.cost > 0 ? `≈ $${tot.cost.toFixed(3)}` : "bepul"}</dd>
+          <dd className="text-xs text-slate-500">Brave: ${e.price_per_1000_usd} / 1000 so&apos;rov</dd></div>
+      </dl>
+      <p className="mb-3 text-xs text-slate-500">{t.modules.confirmHint} {e.note}</p>
+      <ModulePicker modules={mods} selected={selected} onChange={setSelected} showEstimate />
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button className="btn-primary" disabled={busy} onClick={() => go(selected)} data-testid="confirm-modules">{t.modules.start}</button>
+        <button className="btn-secondary" disabled={busy} onClick={() => go(local)}>{t.modules.localOnly}</button>
       </div>
     </Card>
   );
@@ -97,7 +130,8 @@ function ResultView() {
 
   if (notFound) return <Notice tone="warn">Tahlil topilmadi yoki sizga tegishli emas.</Notice>;
   if (!a) return <Spinner />;
-  if (a.status === "awaiting_confirmation") return <WebConfirm a={a} onDone={load} />;
+  if (a.status === "awaiting_confirmation")
+    return a.web_estimate?.modules ? <ModulesConfirm a={a} onDone={load} /> : <WebConfirm a={a} onDone={load} />;
   if (a.status === "queued" || a.status === "running") return <Progress a={a} />;
   if (a.status === "failed") {
     const code = (a.error ?? "").split(":")[0];

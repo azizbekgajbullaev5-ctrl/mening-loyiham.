@@ -1,16 +1,20 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { get } from "@/lib/api";
+import { get, post } from "@/lib/api";
+import { analysisHref } from "@/lib/links";
 import { num } from "@/lib/format";
 import { t } from "@/lib/i18n";
 import { CITATION_COLOR, RESULT_COLORS, colorFor } from "@/lib/sourceColors";
-import type { ContentParagraph, DuplicateDoc, Plagiarism, WebStats } from "@/lib/types";
+import type { AnalysisSummary, ContentParagraph, DuplicateDoc, ModuleCheck, ModuleEstimate, Plagiarism, WebStats } from "@/lib/types";
+import { ModulePicker } from "./ModulePicker";
 import { Card, Notice, Spinner } from "./ui";
 
 function ResultTiles({ p }: { p: Plagiarism }) {
   const tiles = [
     { label: t.plag.originality, value: p.originality, color: RESULT_COLORS.originality },
-    { label: t.plag.borrowing, value: p.borrowing, color: RESULT_COLORS.borrowing, sub: p.paraphrase_share ? `${t.plag.paraphrase}: ${p.paraphrase_share.toFixed(2)}%` : "" },
+    { label: t.plag.borrowing, value: p.borrowing, color: RESULT_COLORS.borrowing,
+      sub: [p.paraphrase_share ? `${t.plag.paraphrase}: ${p.paraphrase_share.toFixed(2)}%` : "",
+        p.modules.translation_share ? `${t.modules.translation}: ${p.modules.translation_share.toFixed(2)}%` : ""].filter(Boolean).join(", ") },
     { label: t.plag.citation, value: p.citation, color: RESULT_COLORS.citation },
   ];
   return (
@@ -69,6 +73,8 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
     mods.corpus && `${t.corpus.title} (${mods.corpus_documents ?? 0})`,
     mods.own && t.plag.ownDocs,
     mods.web && webSummary(mods.web_stats),
+    ...Object.entries(mods.online_stats ?? {}).filter(([k]) => k !== "web").map(([k, st]) =>
+      `${mods.checks?.find((c) => c.key === k)?.label ?? k}: ${st.requests ?? st.queries_used ?? 0} so'rov, ${st.fetched_pages ?? 0}+${st.cached_pages ?? 0} matn`),
     mods.paraphrase && typeof mods.paraphrase === "object" && `Parafraz: ${mods.paraphrase.backend}`,
   ].filter(Boolean);
   const excl = Object.entries(p.exclusions).filter(([, v]) => v > 0);
@@ -76,6 +82,7 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
   return (
     <div className="space-y-6">
       {mods.duplicates?.length ? <Duplicates items={mods.duplicates} /> : null}
+      {mods.checks?.length ? <ModulesCard p={p} documentId={documentId} /> : null}
       <Card title={t.plag.tab} subtitle={t.plag.defs}>
         <ResultTiles p={p} />
         <dl className="mt-4 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
@@ -86,7 +93,7 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
           </div>
           <div className="sm:col-span-2"><dt className="inline font-medium">{t.plag.modules}: </dt><dd className="inline">{modNames.join(" · ") || "—"}</dd></div>
         </dl>
-        {!mods.web && <p className="mt-3 text-xs text-amber-700">{t.plag.scopeLocal}</p>}
+        {!mods.web && !Object.keys(mods.online_stats ?? {}).length && <p className="mt-3 text-xs text-amber-700">{t.plag.scopeLocal}</p>}
         {mods.web && (mods.web_stats?.errors?.length ?? 0) > 0 && (
           <Notice tone="warn">
             Internet tekshiruvi to&apos;liq bo&apos;lmadi: {[...new Set(mods.web_stats!.errors.map(webError))].slice(0, 4).join(" ")}
@@ -120,6 +127,7 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
                         {[s.authors, s.year].filter(Boolean).join(", ")}
                         {s.url && <> · <a className="break-all text-brand-700 underline" href={s.url} target="_blank" rel="noopener noreferrer nofollow">{s.url}</a></>}
                         {s.paraphrase_words > 0 && <> · <i>parafraz: {s.paraphrase_words} so&apos;z</i></>}
+                        {(s.translation_words ?? 0) > 0 && <> · <i>{t.modules.translation}: {s.translation_words} so&apos;z</i></>}
                       </div>
                     </td>
                     <td className="td text-xs">{s.module_label}</td>
@@ -131,7 +139,11 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
         )}
       </Card>
 
-      {mods.web && mods.web_stats && <WebPages stats={mods.web_stats} numbers={srcNumber} />}
+      {Object.entries(mods.online_stats ?? (mods.web_stats ? { web: mods.web_stats } : {})).map(([k, st]) => (
+        <WebPages key={k} stats={st} numbers={srcNumber}
+          title={k === "web" ? t.plag.webPages : `${mods.checks?.find((c) => c.key === k)?.label ?? k}: tekshirilgan manbalar`}
+          subtitle={k === "web" ? undefined : t.plag.modulePagesHint} />
+      ))}
 
       <Card title={t.plag.tricks}>
         {p.integrity.items.length === 0 ? <p className="text-sm text-slate-500">{t.plag.noTricks}</p> : (
@@ -163,6 +175,55 @@ export function PlagiarismPanel({ analysisId, documentId }: { analysisId: string
           )}
       </Card>
     </div>
+  );
+}
+
+const STATE_STYLE: Record<string, string> = {
+  checked: "bg-emerald-100 text-emerald-800", off: "bg-slate-100 text-slate-500", unavailable: "bg-amber-100 text-amber-800", error: "bg-red-100 text-red-800",
+};
+
+function ModulesCard({ p, documentId }: { p: Plagiarism; documentId: string }) {
+  const checks = p.modules.checks ?? [];
+  const [editing, setEditing] = useState(false);
+  const [mods, setMods] = useState<ModuleEstimate[]>([]);
+  const [selected, setSelected] = useState<string[]>(checks.filter((c) => c.state !== "off").map((c) => c.key));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (editing && !mods.length) get<{ modules: ModuleEstimate[] }>("/corpus/modules").then((r) => setMods(r.modules)).catch(() => {});
+  }, [editing, mods.length]);
+  const rerun = async () => {
+    setBusy(true);
+    const r = await post<AnalysisSummary>(`/documents/${documentId}/analyses`, { depth: "standard", modules: selected });
+    window.location.href = analysisHref(r.id);
+  };
+  const detail = (c: ModuleCheck) => {
+    if (c.state === "unavailable") return c.reason;
+    if (c.state !== "checked") return "";
+    const parts = [];
+    if (c.sources_found) parts.push(`${c.sources_found} ${t.modules.found}`);
+    if (c.key === "templates" && c.excluded_words) parts.push(`${c.excluded_words} so'z: ${t.modules.templatesExcluded}`);
+    if (c.errors?.length) parts.push(`xato: ${c.errors[0]}`);
+    return parts.join(" · ");
+  };
+  return (
+    <Card title={t.modules.checkedIn.replace("{n}", String(p.modules.module_total ?? checks.length)).replace("{m}", String(p.modules.checked_count ?? 0))}
+      actions={<button className="btn-secondary px-3 py-1.5" onClick={() => setEditing(!editing)}>{editing ? t.plag.hide : "Modullarni o'zgartirish"}</button>}>
+      <ul className="grid gap-2 text-sm sm:grid-cols-2" data-testid="module-checks">
+        {checks.map((c) => (
+          <li key={c.key} className="flex items-start gap-2">
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${STATE_STYLE[c.state]}`}>{t.modules.states[c.state]}</span>
+            <span><b className="font-medium text-slate-800">{c.label}</b>{detail(c) && <span className="block text-xs text-slate-500">{detail(c)}</span>}</span>
+          </li>
+        ))}
+      </ul>
+      {editing && (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <p className="mb-3 text-xs text-slate-500">{t.modules.rerunHint}</p>
+          {mods.length ? <ModulePicker modules={mods} selected={selected} onChange={setSelected} /> : <Spinner />}
+          <button className="btn-primary mt-3" disabled={busy || !selected.length} onClick={rerun}>{t.modules.rerun}</button>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -210,17 +271,17 @@ function Duplicates({ items }: { items: DuplicateDoc[] }) {
   );
 }
 
-function WebPages({ stats, numbers }: { stats: WebStats; numbers: Map<number, number> }) {
+function WebPages({ stats, numbers, title, subtitle }: { stats: WebStats; numbers: Map<number, number>; title?: string; subtitle?: string }) {
   const [showQueries, setShowQueries] = useState(false);
   const pages = [...(stats.pages ?? [])].sort((a, b) => Number(b.source_index != null) - Number(a.source_index != null) || Number(b.status === "ok") - Number(a.status === "ok"));
   return (
-    <Card title={t.plag.webPages} subtitle={t.plag.webPagesHint} actions={
+    <Card title={title ?? t.plag.webPages} subtitle={subtitle ?? t.plag.webPagesHint} actions={
       stats.query_log?.length ? <button className="btn-secondary px-3 py-1.5" onClick={() => setShowQueries(!showQueries)}>{t.plag.webQueries} ({stats.query_log.length})</button> : undefined
     }>
       {showQueries && stats.query_log && (
         <ol className="mb-4 ml-5 list-decimal space-y-1 text-xs text-slate-600">
           {stats.query_log.map((q, i) => (
-            <li key={i}>{q.q} — <span className={q.results ? "text-slate-800" : "text-amber-700"}>{q.results == null ? `xato: ${q.error ?? ""}` : `${q.results} natija`}</span></li>
+            <li key={i}>{q.source ? <b>{q.source}: </b> : null}{q.q} — <span className={q.results ? "text-slate-800" : "text-amber-700"}>{q.results == null ? `xato: ${q.error ?? ""}` : `${q.results} natija`}</span></li>
           ))}
         </ol>
       )}
@@ -234,19 +295,19 @@ function WebPages({ stats, numbers }: { stats: WebStats; numbers: Map<number, nu
               {pages.map((pg) => {
                 const n = pg.source_index != null ? numbers.get(pg.source_index) : undefined;
                 return (
-                  <tr key={pg.url}>
+                  <tr key={`${pg.url}-${pg.source_url ?? ""}`}>
                     <td className="td max-w-md">
                       <div className="truncate font-medium text-slate-800">{pg.title || pg.url}</div>
                       <a className="break-all text-xs text-brand-700 underline" href={pg.url} target="_blank" rel="noopener noreferrer nofollow">{pg.url}</a>
                     </td>
-                    <td className={`td text-xs ${pg.status === "ok" ? "text-slate-700" : "text-amber-700"}`}>
+                    <td className={`td text-xs ${pg.status === "ok" || pg.status === "api_text" ? "text-slate-700" : "text-amber-700"}`}>
                       {t.plag.pageStatus[pg.status] ?? (pg.status.startsWith("http_") ? `server javobi ${pg.status.slice(5)}` : pg.status)}
                       {pg.cached && " (keshdan)"}
                       {pg.status === "ok" && pg.words > 0 && <span className="text-slate-500"> · {num(pg.words)} so&apos;z</span>}
                     </td>
                     <td className="td text-xs">
                       {n ? <span className="rounded px-1.5 py-0.5 font-semibold text-slate-800" style={{ background: colorFor(pg.source_index!) }}>manba [{n}]</span>
-                        : pg.status === "ok" ? "moslik yo'q" : "—"}
+                        : pg.status === "ok" || pg.status === "api_text" ? "moslik yo'q" : "—"}
                     </td>
                   </tr>
                 );
@@ -272,7 +333,8 @@ function Highlighted({ text, spans, numbers }: { text: string; spans: Plagiarism
     } else {
       const n = numbers.get(src);
       parts.push(
-        <mark key={k} style={{ background: colorFor(src) }} className={cls === "p" ? "italic" : ""} title={n ? `Manba [${n}]${cls === "p" ? " — parafraz" : ""}` : undefined}>
+        <mark key={k} style={{ background: colorFor(src) }} className={cls === "p" ? "italic" : cls === "t" ? "italic underline decoration-dotted" : ""}
+          title={n ? `Manba [${n}]${cls === "p" ? " — parafraz" : cls === "t" ? " — tarjima" : ""}` : undefined}>
           {n && <sup className="mr-0.5 font-sans text-[9px] font-semibold text-slate-700">[{n}]</sup>}
           {frag}
         </mark>,

@@ -91,6 +91,10 @@ class Settings(BaseSettings):
 
     # --- plagiarism: reference corpus, paraphrase, internet ---
     ADMIN_EMAILS: str = ""  # comma list; the first registered user is always admin
+    CORPUS_MAX_ZIP_MB: int = 1024  # ZIP archive with many documents (one upload)
+    CORPUS_MAX_FILES_PER_IMPORT: int = 5000
+    # import a folder of this computer by path (admin). None = only in local single-PC mode (SQLite + thread worker)
+    CORPUS_LOCAL_IMPORT: bool | None = None
     CORPUS_MAX_UPLOAD_MB: int = 60
     EMBEDDING_BACKEND: Literal["auto", "model2vec", "hash"] = "auto"
     EMBEDDING_MODEL: str = "minishlab/potion-multilingual-128M"
@@ -125,6 +129,20 @@ class Settings(BaseSettings):
     OPENALEX_FILTER: str = "is_oa:true"
     CORE_API_KEY: SecretStr = SecretStr("")
     CROSSREF_MAILTO: str = ""
+    # --- plagiarism check modules (see app/plagiarism/modules.py)
+    DEFAULT_CHECK_MODULES: str = "corpus,own,ojs,translation,templates"  # enabled by default on upload
+    MODULE_WORDS_PER_QUERY: int = 1000  # scholarly / CyberLeninka / patents / lex.uz: 1 query per N words
+    MODULE_MAX_QUERIES: int = 40  # per module
+    MODULE_RESULTS_PER_QUERY: int = 5
+    MODULE_FULLTEXT_PER_QUERY: int = 2  # open full texts (PDF) downloaded per query, open licences only
+    SCHOLARLY_SOURCES: str = "openalex,crossref,semanticscholar,core,arxiv"
+    SEMANTIC_SCHOLAR_API_KEY: SecretStr = SecretStr("")  # optional; without a key the shared 1 req/s pool is used
+    LENS_API_TOKEN: SecretStr = SecretStr("")  # https://www.lens.org/lens/user/subscriptions (free for scholarly use)
+    LEGAL_SITE: str = "lex.uz"  # searched through Brave ("site:lex.uz ..."); pages fetched honouring robots.txt
+    TRANSLATION_THRESHOLD: float = 0.80  # cosine for cross-language matches (model backend only; heuristic)
+    TEMPLATE_PHRASES: str = ""  # extra standard phrases, separated by "|"
+    OJS_AUTO_HARVEST_HOURS: int = 0  # >0: re-harvest HARVEST_OJS_URLS every N hours (known articles are skipped)
+    OJS_AUTO_HARVEST_LIMIT: int = 2000  # records listed per journal per automatic run
 
     PROVIDER_TIMEOUT_SECONDS: float = 60.0
     PROVIDER_MAX_RETRIES: int = 3
@@ -134,6 +152,12 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def corpus_local_import(self) -> bool:
+        if self.CORPUS_LOCAL_IMPORT is not None:
+            return self.CORPUS_LOCAL_IMPORT
+        return self.TASK_MODE == "thread" and self.DATABASE_URL.startswith("sqlite")
 
     @property
     def admin_emails(self) -> set[str]:

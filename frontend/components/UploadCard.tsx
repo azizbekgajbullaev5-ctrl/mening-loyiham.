@@ -4,6 +4,8 @@ import { ApiError, get, uploadWithProgress } from "@/lib/api";
 import { bytes } from "@/lib/format";
 import { analysisHref } from "@/lib/links";
 import { t } from "@/lib/i18n";
+import type { ModuleEstimate } from "@/lib/types";
+import { ModulePicker } from "./ModulePicker";
 import { Card, ProgressBar } from "./ui";
 
 const ACCEPT = ".docx,.pdf,.txt";
@@ -18,12 +20,14 @@ export function UploadCard({ onUploaded }: { onUploaded: () => void }) {
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const [maxMb, setMaxMb] = useState(50);
-  const [corpusCheck, setCorpusCheck] = useState(true);
-  const [webCheck, setWebCheck] = useState(false);
-  const [braveOk, setBraveOk] = useState(false);
+  const [modules, setModules] = useState<ModuleEstimate[]>([]);
+  const [selected, setSelected] = useState<string[] | null>(null);
   useEffect(() => {
     get<{ max_upload_mb: number }>("/system/config").then((c) => setMaxMb(c.max_upload_mb)).catch(() => {});
-    get<{ brave_configured: boolean }>("/corpus/settings").then((c) => setBraveOk(c.brave_configured)).catch(() => {});
+    get<{ modules: ModuleEstimate[]; defaults: string[] }>("/corpus/modules").then((r) => {
+      setModules(r.modules);
+      setSelected(r.defaults);
+    }).catch(() => setSelected(["corpus", "own"]));
   }, []);
 
   const addFiles = (list: FileList | null) => {
@@ -52,8 +56,7 @@ export function UploadCard({ onUploaded }: { onUploaded: () => void }) {
     form.append("doc_type", docType);
     form.append("depth", depth);
     form.append("keep_for_similarity", String(keep));
-    form.append("corpus_check", String(corpusCheck));
-    form.append("web_check", String(webCheck && braveOk));
+    form.append("modules", (selected ?? []).filter((k) => modules.find((m) => m.key === k)?.available ?? true).join(","));
     setProgress(0);
     setErrors([]);
     try {
@@ -61,7 +64,7 @@ export function UploadCard({ onUploaded }: { onUploaded: () => void }) {
       setErrors(res.errors.map((e) => `${e.filename}: ${e.message}`));
       setFiles([]);
       onUploaded();
-      // internet check: go straight to the cost confirmation
+      // online modules: go straight to the request / price confirmation
       if (res.items.length === 1 && res.items[0].analysis.status === "awaiting_confirmation") {
         window.location.href = analysisHref(res.items[0].analysis.id);
       }
@@ -116,18 +119,10 @@ export function UploadCard({ onUploaded }: { onUploaded: () => void }) {
           <p className="mt-1 text-xs text-slate-500">{t.depthHints[depth]}</p>
         </div>
       </div>
-      <fieldset className="mt-4 space-y-2 rounded-lg border border-slate-200 p-3">
-        <label className="flex items-start gap-2 text-sm text-slate-700">
-          <input type="checkbox" className="mt-1" checked={corpusCheck} onChange={(e) => setCorpusCheck(e.target.checked)} />
-          {t.web.corpusCheck}
-        </label>
-        <label className={`flex items-start gap-2 text-sm ${braveOk ? "text-slate-700" : "text-slate-400"}`}>
-          <input type="checkbox" className="mt-1" checked={webCheck && braveOk} disabled={!braveOk} onChange={(e) => setWebCheck(e.target.checked)} />
-          <span>
-            {t.web.webCheck}
-            <span className="block text-xs text-slate-500">{braveOk ? t.web.webHint : t.web.webNotConfigured}</span>
-          </span>
-        </label>
+      <fieldset className="mt-4 rounded-lg border border-slate-200 p-3">
+        <legend className="px-1 text-sm font-medium text-slate-700">{t.modules.title}</legend>
+        <p className="mb-3 text-xs text-slate-500">{t.modules.uploadHint}</p>
+        {modules.length > 0 && selected ? <ModulePicker modules={modules} selected={selected} onChange={setSelected} /> : null}
       </fieldset>
       <label className="mt-3 flex items-start gap-2 text-xs text-slate-600">
         <input type="checkbox" className="mt-0.5" checked={keep} onChange={(e) => setKeep(e.target.checked)} />

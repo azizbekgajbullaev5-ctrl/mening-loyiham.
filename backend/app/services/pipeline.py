@@ -395,18 +395,37 @@ def _run(db: Session, analysis_id: str, progress: Progress) -> None:
     db.commit()
 
 
+ONLINE_ORDER = ("scholarly", "cyberleninka", "patents", "legal", "web")
+
+
 def _plagiarism(db: Session, a: Analysis, doc: Document, prep: Prepared, profile, progress, copies: list[dict] | None = None) -> None:
-    from app.plagiarism import integrity, matcher
+    from app.plagiarism import embeddings, integrity, matcher, online
+    from app.plagiarism import modules as pm
     from app.plagiarism import web as webcheck
 
+    s = get_settings()
     step = lambda msg: progress(82, "plagiarism", msg)  # noqa: E731
     copies = copies or []
     skip_ids = {c["id"] for c in copies if c["excluded"]}
-    web_sources, web_stats = None, None
-    if a.web_check:
-        # first pass (no paraphrase) tells which sentences are already found locally: those are not searched online
-        pre, stream = matcher.compare(db, prep.doc.blocks, prep.sections, doc, a.corpus_check, None, step,
-                                      run_paraphrase=False, exclude_own=skip_ids)
+    enabled = pm.enabled_for(a)
+    # module status for the report: checked | off | unavailable | error
+    checks: dict[str, dict] = {}
+    for m in pm.MODULES:
+        if m.key not in enabled:
+            checks[m.key] = {"key": m.key, "label": m.label, "state": "off"}
+            continue
+        ok, reason = pm.availability(m.key, db)
+        checks[m.key] = {"key": m.key, "label": m.label, "state": "checked" if ok else "unavailable", "reason": reason}
+    active = {k for k, c in checks.items() if c["state"] == "checked"}
+    online_keys = [k for k in ONLINE_ORDER if k in active]
+    with_vectors = "translation" in active and embeddings.expected_kind() != "hash"
+
+    ext_sources: list = []
+    stats_by_module: dict[str, dict] = {}
+    if online_keys:
+        # first pass (local modules, no paraphrase): sentences already found locally are not searched online
+        pre, stream = matcher.compare(db, prep.doc.blocks, prep.sections, doc, run_paraphrase=False, exclude_own=skip_ids,
+                                      enabled=active - set(pm.ONLINE), progress=step)
         covered = np.zeros(len(stream.canon), dtype=bool)
         by_block: dict[int, list[tuple[int, int]]] = defaultdict(list)
         for i, (b, s0) in enumerate(zip(stream.block, stream.start)):
@@ -415,20 +434,60 @@ def _plagiarism(db: Session, a: Analysis, doc: Document, prep: Prepared, profile
             for s0, i in by_block.get(blk, ()):
                 if st <= s0 < en:
                     covered[i] = True
-        planned = int((a.web_estimate or {}).get("queries") or webcheck.planned_queries(len(stream.canon)))
-        web_sources, web_stats = webcheck.run(db, stream, covered, planned, progress=lambda m: progress(84, "web", m),
-                                              abbreviations=profile.abbreviations)
-    outcome, _ = matcher.compare(db, prep.doc.blocks, prep.sections, doc, a.corpus_check, web_sources, step, exclude_own=skip_ids)
+        planned_est = (a.web_estimate or {}).get("modules") or {}
+        for key in online_keys:
+            planned = int((planned_est.get(key) or {}).get("queries") or 0)
+            if not planned:
+                planned = int((a.web_estimate or {}).get("queries") or 0) if key == "web" and not planned_est else 0
+            planned = planned or pm.module_queries(key, len(stream.canon))
+            report = lambda m, key=key: progress(84, "web" if key == "web" else "online", m)  # noqa: E731
+            try:
+                if key in ("web", "legal"):
+                    srcs, st = webcheck.run(db, stream, covered, planned, progress=report, abbreviations=profile.abbreviations,
+                                            module=key, site=s.LEGAL_SITE if key == "legal" else None, with_vectors=with_vectors)
+                else:
+                    srcs, st = online.run_module(db, key, stream, covered, planned, progress=report, with_vectors=with_vectors,
+                                                 abbreviations=profile.abbreviations)
+            except Exception as exc:  # noqa: BLE001 - a failing module never fails the analysis
+                log.warning("module %s failed: %s", key, exc)
+                srcs, st = [], {"errors": [f"{exc.__class__.__name__}: {exc}"[:200]]}
+                checks[key]["state"] = "error"
+            ext_sources.extend(srcs)
+            stats_by_module[key] = st
+    outcome, _ = matcher.compare(db, prep.doc.blocks, prep.sections, doc, web_sources=ext_sources, progress=step,
+                                 exclude_own=skip_ids, enabled=active, doc_language=prep.language)
     modules = dict(outcome.modules)
-    modules["corpus_documents"] = db.scalar(select(func.count()).select_from(RefDocument)) if a.corpus_check else 0
+    modules["corpus_documents"] = db.scalar(select(func.count()).select_from(RefDocument)) if "corpus" in active else 0
     if copies:
         modules["duplicates"] = copies
-    if web_stats is not None:
-        matched = {src["url"]: src["index"] for src in outcome.sources if src["module"] == "web" and src.get("url")}
-        for page in web_stats.get("pages", []):
-            page["source_index"] = matched.get(page["url"])  # set when the page was found as a source
-        modules["web"] = True  # the check ran, even if it found nothing or failed (errors are listed)
-        modules["web_stats"] = web_stats
+    by_url = {(src["module"], src.get("url")): src["index"] for src in outcome.sources if src.get("url")}
+    for key, st in stats_by_module.items():
+        for page in st.get("pages", []):
+            page["source_index"] = by_url.get((key, page.get("source_url") or page["url"]))  # set when it became a source
+        found = sum(1 for src in outcome.sources if src["module"] == key)
+        st["sources_found"] = found
+        checks[key]["stats"] = {k: st.get(k) for k in ("queries_used", "requests", "results_total", "fetched_pages", "cached_pages",
+                                                      "failed_pages", "cost_usd", "per_source") if st.get(k) is not None}
+        checks[key]["sources_found"] = found
+        if st.get("errors") and checks[key]["state"] == "checked":
+            checks[key]["errors"] = st["errors"][:5]
+            done = st.get("requests", st.get("queries_used", 0)) or 0
+            if not done:  # not a single search succeeded: the module did not check anything
+                checks[key]["state"] = "error"
+        modules[key] = True
+    if "web" in stats_by_module:
+        modules["web_stats"] = stats_by_module["web"]  # detailed page table (older UI / report)
+    modules["online_stats"] = {k: v for k, v in stats_by_module.items()}
+    for key in active - set(pm.ONLINE):
+        checks[key]["sources_found"] = sum(1 for src in outcome.sources if src["module"] == key)
+    if "translation" in active:
+        checks["translation"]["sources_found"] = sum(1 for src in outcome.sources if src.get("translation_words"))
+    if "templates" in active:
+        checks["templates"]["excluded_words"] = (modules.get("templates") or {}).get("excluded_from_borrowing", 0)
+    modules["checks"] = [checks[m.key] for m in pm.MODULES]
+    modules["checked_count"] = sum(1 for c in checks.values() if c["state"] == "checked")
+    modules["module_total"] = len(pm.MODULES)
+    modules["cost_usd"] = round(sum((st.get("cost_usd") or 0) for st in stats_by_module.values()), 4)
     db.execute(delete(PlagiarismResult).where(PlagiarismResult.analysis_id == a.id))
     db.add(PlagiarismResult(
         analysis_id=a.id, checked_words=outcome.checked_words, excluded_words=outcome.excluded_words,

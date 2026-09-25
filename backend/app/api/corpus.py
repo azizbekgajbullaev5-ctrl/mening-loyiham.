@@ -90,7 +90,7 @@ async def upload(
     s = get_settings()
     if doc_kind not in DOC_KINDS:
         raise HTTPException(422, "invalid_doc_kind")
-    if len(files) > 200:
+    if len(files) > 500:
         raise HTTPException(422, "too_many_files")
     job = CorpusJob(kind="ingest", created_by=user.id, params={"doc_kind": doc_kind})
     db.add(job)
@@ -120,6 +120,120 @@ async def upload(
     return {"job": _job_out(job), "errors": errors}
 
 
+CORPUS_EXTS = {"docx": "docx", "pdf": "pdf", "txt": "txt"}
+ZIP_MAX_RATIO = 200  # an entry that expands more than this is treated as a zip bomb
+
+
+@router.post("/upload-zip", status_code=201)
+async def upload_zip(
+    request: Request,
+    file: UploadFile = File(...),
+    doc_kind: str = Form("other"),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """One ZIP archive with hundreds of DOCX/PDF/TXT files (folders inside are kept as the "folder")."""
+    import zipfile
+
+    s = get_settings()
+    if doc_kind not in DOC_KINDS:
+        raise HTTPException(422, "invalid_doc_kind")
+    size = file.file.seek(0, 2)
+    file.file.seek(0)
+    if size > s.CORPUS_MAX_ZIP_MB * 1024 * 1024:
+        raise HTTPException(413, "zip_too_large")
+    try:
+        zf = zipfile.ZipFile(file.file)
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(422, "bad_zip") from exc
+    job = CorpusJob(kind="ingest", created_by=user.id, params={"doc_kind": doc_kind, "zip": file.filename})
+    db.add(job)
+    db.flush()
+    errors, total_bytes = [], 0
+    limit = s.CORPUS_MAX_UPLOAD_MB * 1024 * 1024
+    for info in zf.infolist():
+        name = info.filename.replace("\\", "/")
+        base = name.rsplit("/", 1)[-1]
+        if info.is_dir() or name.startswith("__MACOSX/") or base.startswith((".", "~$")):
+            continue
+        if base.rsplit(".", 1)[-1].lower() not in CORPUS_EXTS:
+            continue
+        if job.total >= s.CORPUS_MAX_FILES_PER_IMPORT:
+            errors.append({"filename": name, "code": "too_many_files"})
+            break
+        if info.file_size > limit or (info.compress_size and info.file_size / info.compress_size > ZIP_MAX_RATIO):
+            errors.append({"filename": name, "code": "too_large" if info.file_size > limit else "zip_bomb"})
+            continue
+        total_bytes += info.file_size
+        if total_bytes > 4 * s.CORPUS_MAX_ZIP_MB * 1024 * 1024:
+            errors.append({"filename": name, "code": "archive_too_large_uncompressed"})
+            break
+        data = zf.read(info)
+        try:
+            v = validate_upload(base, data)
+        except ValidationError as exc:
+            errors.append({"filename": name, "code": exc.code})
+            continue
+        folder = name.rsplit("/", 1)[0] if "/" in name else ""
+        db.add(CorpusJobItem(job_id=job.id, filename=v.safe_name, folder=folder[:300], file_type=v.file_type, storage_key=storage.save(data)))
+        job.total += 1
+    if not job.total:
+        db.rollback()
+        raise HTTPException(422, {"errors": errors or [{"filename": file.filename, "code": "no_documents"}]})
+    audit(db, "corpus_upload", user.id, "corpus_job", job.id, client_ip(request), files=job.total, zip=True)
+    db.commit()
+    jobs.enqueue(job.id)
+    db.refresh(job)
+    return {"job": _job_out(job), "errors": errors}
+
+
+class FolderIn(BaseModel):
+    path: str = Field(min_length=1, max_length=1000)
+    doc_kind: str = "other"
+
+
+@router.post("/import-folder", status_code=201)
+def import_folder(body: FolderIn, request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Index every DOCX/PDF/TXT under a folder of this computer (local single-PC mode). Files are read in place:
+    nothing is copied or deleted. Hundreds of files at once, e.g. C:\\Kutubxona\\Darsliklar."""
+    import os
+    from pathlib import Path
+
+    s = get_settings()
+    if not s.corpus_local_import:
+        raise HTTPException(403, "local_import_disabled")
+    if body.doc_kind not in DOC_KINDS:
+        raise HTTPException(422, "invalid_doc_kind")
+    root = Path(body.path.strip().strip('"')).expanduser()
+    if not root.is_dir():
+        raise HTTPException(422, "folder_not_found")
+    root = root.resolve()
+    job = CorpusJob(kind="ingest", created_by=user.id, params={"doc_kind": body.doc_kind, "root": str(root), "local": True})
+    db.add(job)
+    db.flush()
+    skipped = 0
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        rel = Path(dirpath).relative_to(root).as_posix()
+        for fn in sorted(filenames):
+            ext = fn.rsplit(".", 1)[-1].lower() if "." in fn else ""
+            if ext not in CORPUS_EXTS or fn.startswith(("~$", ".")):
+                continue
+            if job.total >= s.CORPUS_MAX_FILES_PER_IMPORT:
+                skipped += 1
+                continue
+            db.add(CorpusJobItem(job_id=job.id, filename=fn[:300], folder=("" if rel == "." else rel)[:300], file_type=CORPUS_EXTS[ext]))
+            job.total += 1
+    if not job.total:
+        db.rollback()
+        raise HTTPException(422, "no_documents_in_folder")
+    audit(db, "corpus_import_folder", user.id, "corpus_job", job.id, client_ip(request), files=job.total)
+    db.commit()
+    jobs.enqueue(job.id)
+    db.refresh(job)
+    return {"job": _job_out(job), "skipped_over_limit": skipped}
+
+
 class HarvestIn(BaseModel):
     sources: list[Literal["ojs", "openalex", "core", "crossref", "cyberleninka"]] = Field(min_length=1)
     queries: list[str] = Field(default_factory=list, max_length=50)
@@ -146,6 +260,15 @@ def harvest(body: HarvestIn, request: Request, user: User = Depends(require_admi
     return _job_out(job)
 
 
+@router.get("/modules")
+def list_modules(words: int = Query(0, ge=0, le=5_000_000), _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Plagiarism modules with availability, defaults and (for ``words`` > 0) the per-module estimate."""
+    from app.plagiarism import modules as plag_modules
+
+    est = plag_modules.estimate(words, plag_modules.default_modules(), db)
+    return {"modules": list(est["modules"].values()), "defaults": plag_modules.default_modules(), "estimate": est}
+
+
 @router.get("/settings")
 def harvest_settings(_: User = Depends(get_current_user)):
     s = get_settings()
@@ -154,6 +277,8 @@ def harvest_settings(_: User = Depends(get_current_user)):
         "limit": s.HARVEST_MAX_PER_SOURCE, "fulltext": s.HARVEST_FETCH_FULLTEXT,
         "core_configured": bool(s.CORE_API_KEY.get_secret_value()), "brave_configured": bool(s.BRAVE_API_KEY.get_secret_value()),
         "doc_kinds": list(DOC_KINDS),
+        "local_import": s.corpus_local_import, "max_zip_mb": s.CORPUS_MAX_ZIP_MB, "max_files": s.CORPUS_MAX_FILES_PER_IMPORT,
+        "ojs_auto_hours": s.OJS_AUTO_HARVEST_HOURS,
     }
 
 

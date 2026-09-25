@@ -13,6 +13,7 @@ from app.api.deps import client_ip, get_current_user, owned_analysis
 from app.api.serializers import analysis_detail, analysis_summary, match_out, passage_out, plagiarism_out, section_out
 from app.core.database import get_db
 from app.models import Analysis, Report, User
+from app.plagiarism import modules as plag_modules
 from app.reporting.builder import build_report_data
 from app.reporting.docx_report import render_docx
 from app.reporting.pdf_report import render_pdf
@@ -36,7 +37,8 @@ def get_analysis(analysis_id: str, lang: Lang = "uz", user: User = Depends(get_c
 
 
 class ConfirmIn(BaseModel):
-    web_check: bool = True
+    web_check: bool = True  # legacy: toggles only the internet module
+    modules: list[str] | None = None  # final module selection (overrides web_check)
 
 
 @router.post("/{analysis_id}/confirm")
@@ -45,10 +47,19 @@ def confirm_analysis(analysis_id: str, body: ConfirmIn, request: Request, user: 
     a = owned_analysis(db, user, analysis_id)
     if a.status != "awaiting_confirmation":
         raise HTTPException(409, "not_awaiting_confirmation")
-    a.web_check = body.web_check
+    keys = plag_modules.enabled_for(a)
+    if body.modules is not None:
+        keys = plag_modules.normalize(body.modules)
+    elif not body.web_check:
+        keys = [k for k in keys if k != "web"]
+    elif "web" not in keys:
+        keys.append("web")
+    a.check_modules = keys
+    a.corpus_check, a.web_check = "corpus" in keys, "web" in keys
     a.status, a.stage = "queued", "queued"
-    audit(db, "analysis_confirmed", user.id, "analysis", a.id, client_ip(request), web_check=body.web_check,
-          estimate=(a.web_estimate or {}).get("cost_usd"))
+    est = (a.web_estimate or {}).get("modules") or {}
+    cost = round(sum((est.get(k) or {}).get("cost_usd", 0) for k in keys), 4) if est else (a.web_estimate or {}).get("cost_usd")
+    audit(db, "analysis_confirmed", user.id, "analysis", a.id, client_ip(request), modules=keys, estimate=cost)
     db.commit()
     enqueue_analysis(a.id)
     db.refresh(a)

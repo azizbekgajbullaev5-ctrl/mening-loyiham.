@@ -33,6 +33,7 @@ async def lifespan(_: FastAPI):
         from app.plagiarism import jobs as corpus_jobs
 
         corpus_jobs.recover()
+        corpus_jobs.start_ojs_scheduler()
     from app.tasks.maintenance import start_periodic_cleanup
 
     start_periodic_cleanup()

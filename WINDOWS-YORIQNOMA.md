@@ -163,6 +163,48 @@ CORE_API_KEY=                  (core.ac.uk dan bepul kalit)
 Adabiyotlar ro'yxati, mundarija, titul varag'i, jadvallar va formulalar tekshirilmaydi. Qo'shtirnoq ichidagi
 va manbaga havola (`[3]` yoki `(Karimov, 2020)`) berilgan parcha **iqtibos** hisoblanadi.
 
+### Tekshirish modullari (Antiplag.uz uslubida)
+
+Hujjat yuklashda **"Tekshirish modullari"** ro'yxatidan kerakli modullarni belgilaysiz. Natijada
+**"10 ta moduldan N tasida tekshirilgan"** deb yoziladi, har bir modulning holati ham ko'rsatiladi.
+
+| Modul | Nima bilan solishtiradi | Nima kerak | Narx |
+|---|---|---|---|
+| Ma'lumotnoma bazasi | Siz yuklagan darslik, maqola, dissertatsiyalar | — | bepul |
+| Sizning hujjatlaringiz | Oldingi yuklamalaringiz | — | bepul |
+| O'zbek OJS jurnallari | OJS jurnallaridan yig'ilgan maqolalar | `HARVEST_OJS_URLS` | bepul |
+| Ilmiy bazalar | OpenAlex, Crossref, Semantic Scholar, CORE, arXiv | internet (CORE uchun bepul kalit) | bepul |
+| CyberLeninka | Rus tilidagi ochiq maqolalar | internet | bepul |
+| Patentlar | Lens.org patentlari | `LENS_API_TOKEN` (bepul) | bepul |
+| Me'yoriy hujjatlar | lex.uz | Brave kaliti | pullik (Brave) |
+| Internet | Butun internet | Brave kaliti | pullik (Brave) |
+| Tarjima | Boshqa tildagi manbadan tarjima (o'zbek ↔ rus ↔ ingliz) | ko'p tilli model | bepul |
+| Shablon iboralar | "dolzarbligi shundaki", "ushbu ishda" kabilar o'zlashtirishga qo'shilmaydi | — | bepul |
+
+* Onlayn modul tanlansa, tahlil darhol boshlanmaydi. Oldin har bir modul uchun **so'rovlar soni, yuklab
+  olinadigan matnlar, taxminiy vaqt va narx** ko'rsatiladi. Keraksiz modulni o'chirib, **"Tanlangan modullar
+  bilan boshlash"** ni bosasiz.
+* Natija sahifasida **"Modullarni o'zgartirish"** tugmasi bor: boshqa modullar bilan qayta tekshirish mumkin.
+* Dastur faqat ochiq manbalardan foydalanadi. Saytlarning robots.txt qoidalariga amal qiladi, to'liq matnni
+  faqat ochiq litsenziyali bo'lsa yuklaydi va matnlarni saqlamaydi.
+* **Tarjima moduli** ko'p tilli modelni talab qiladi. Model birinchi ishga tushirishda internet orqali bir
+  marta yuklanadi (~0,5 GB). Agar birinchi marta internet bo'lmagan bo'lsa, internetni ulang,
+  `backend\data\models\embedding_backend.txt` faylini o'chiring va `start.bat` ni qayta ishga tushiring.
+  Shundan keyin bazaga yuklangan hujjatlarni qayta qo'shing.
+* **Patentlar:** https://www.lens.org saytidan bepul token oling va `backend\.env` ga `LENS_API_TOKEN=...` deb yozing.
+  Google Patents ishlatilmaydi, chunki uning qoidalari avtomatik so'rovga ruxsat bermaydi.
+* **O'zbek OJS jurnallari:** `backend\.env` da `HARVEST_OJS_URLS=https://jurnal1.uz/index.php/j1,...` deb
+  yozing. Dastur har 24 soatda (`OJS_AUTO_HARVEST_HOURS`) yangi maqolalarni o'zi qo'shadi.
+
+### Yuzlab hujjatni bir martada qo'shish
+
+"Ma'lumotnoma bazasi" sahifasidagi **"Yuzlab hujjatni bir martada qo'shish"** bo'limida ikki usul bor:
+1. **Kompyuterdagi papka yo'li** — masalan `C:\Kutubxona\Darsliklar`. Yo'lni kiriting va **"Papkani qo'shish"**
+   ni bosing. Ichki papkalar bilan 5000 tagacha fayl qo'shiladi. Fayllar nusxalanmaydi va o'chirilmaydi.
+2. **ZIP arxiv** — papkani ZIP qilib yuklang (1 GB gacha).
+
+Jarayon pastdagi "Vazifalar" ro'yxatida ko'rinadi. Takroriy hujjatlar o'tkazib yuboriladi.
+
 ### 3. Internet tekshiruvi uchun Brave kaliti (ixtiyoriy, pullik)
 1. https://brave.com/search/api/ da ro'yxatdan o'ting va API kalitini oling.
 2. `backend\.env` fayliga yozing:
