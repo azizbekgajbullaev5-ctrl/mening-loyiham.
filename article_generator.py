@@ -3,13 +3,20 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
+import re
 from dataclasses import dataclass
 
 from anthropic import AsyncAnthropic
 
 import config
+import sources
+
+logger = logging.getLogger(__name__)
 
 _client = AsyncAnthropic(api_key=config.ANTHROPIC_API_KEY)
+
+_CIT_RE = re.compile(r"\[(\d[\d\s,;]*)\]")
 
 # Maqola/tezis tana qismi qaysi tilda yoziladi
 BODY_LANGUAGE = {
@@ -159,7 +166,37 @@ def _common_head(req: ArticleRequest, body_lang: str) -> str:
     )
 
 
-def _article_prompt(req: ArticleRequest) -> str:
+def _queries(req: ArticleRequest) -> list[str]:
+    qs = [req.topic.strip()]
+    if req.field and req.field.strip() not in {"—", "-"}:
+        qs.append(f"{req.topic} {req.field}".strip())
+    kw = (req.keywords or "").strip()
+    if kw and kw not in {"—", "-"}:
+        qs.append(kw.replace(",", " "))
+    return [q for q in qs if q][:3]
+
+
+def _cite_block(evidence: str, low: int, high: int) -> str:
+    if not evidence:
+        return (
+            "\n- Foydalanilgan adabiyotlar: real, mavzuga mos manbalar; "
+            "har biri muallif, sarlavha, nashr, yil, DOI/URL bilan."
+        )
+    return (
+        "\n\nMANBALAR RO'YXATI (faqat SHULARDAN foydalaning):\n" + evidence +
+        "\n\nIQTIBOS QOIDALARI (majburiy):\n"
+        "- Matnda faqat yuqoridagi ro'yxatdagi manbalarga [raqam] shaklida havola "
+        "bering (masalan [1], [3; 7]). Ro'yxatda YO'Q raqamga havola bermang.\n"
+        "- O'ylab topilgan manba, muallif, DOI yoki statistika QAT'IYAN taqiqlanadi. "
+        "Har bir da'vo va raqam mos manba bilan asoslansin.\n"
+        f"- Iloji boricha ko'proq, taxminan {low}–{high} xil manbadan foydalaning.\n"
+        "- Jadval/diagrammadagi raqamlar ham shu manbalardan olinsin va 'source' "
+        "maydonida manba ko'rsatilsin.\n"
+        "- 'references' maydonini bo'sh massiv [] qoldiring — u avtomatik tuziladi."
+    )
+
+
+def _article_prompt(req: ArticleRequest, evidence: str = "") -> str:
     body_lang = BODY_LANGUAGE.get(req.lang, BODY_LANGUAGE["uz"])
     target_words = max(1, req.pages) * WORDS_PER_PAGE
     return (
@@ -179,14 +216,14 @@ def _article_prompt(req: ArticleRequest) -> str:
         "('tables' va 'charts' da), har biri matnda tilga olinsin.\n"
         "- Muhokama: natijalar boshqa tadqiqotlar bilan qiyoslanadi.\n"
         "- Xulosa: aniq xulosa va amaliy takliflar.\n"
-        "- Adabiyotlar: 15–25 ta manba, GOST R 7.0.5 uslubida, DOI/URL bilan.\n"
         "- Ilmiy-akademik uslub, sun'iy intellekt izlarisiz, shablon iboralarsiz, "
         "markdown belgilarisiz. Yaxlit abzaslar.\n"
         "- Jadval/diagrammadagi barcha matn asosiy tilda bo'lsin."
+        + _cite_block(evidence, 15, 25)
     )
 
 
-def _thesis_prompt(req: ArticleRequest) -> str:
+def _thesis_prompt(req: ArticleRequest, evidence: str = "") -> str:
     body_lang = BODY_LANGUAGE.get(req.lang, BODY_LANGUAGE["uz"])
     target_words = max(1, req.pages) * WORDS_PER_PAGE
     return (
@@ -202,9 +239,9 @@ def _thesis_prompt(req: ArticleRequest) -> str:
         "- UDK indeksini to'g'ri tanlang.\n"
         "- Sarlavha, annotatsiya va kalit so'zlar FAQAT tanlangan tilda.\n"
         "- Annotatsiya 40–60 so'z, kalit so'zlar 4–6 ta.\n"
-        "- Adabiyotlar: 6–10 ta real, GOST R 7.0.5 uslubida, DOI/URL bilan.\n"
         "- Ilmiy-akademik uslub, sun'iy intellekt izlarisiz, markdown belgilarisiz.\n"
         "- 'body' — yaxlit matn, ichki sarlavhalarsiz."
+        + _cite_block(evidence, 6, 10)
     )
 
 
@@ -227,12 +264,62 @@ def _normalize_tree(obj):
     return obj
 
 
-async def generate_article(req: ArticleRequest) -> dict:
-    """Maqola yoki tezisni generatsiya qiladi va bo'limlar dict'ini qaytaradi."""
-    is_thesis = req.work_type == config.WORK_THESIS
-    prompt = _thesis_prompt(req) if is_thesis else _article_prompt(req)
-    schema = THESIS_SCHEMA if is_thesis else ARTICLE_SCHEMA
+def _apply_citations(article: dict, srcs: list, is_thesis: bool) -> None:
+    """Matndagi [n] iqtiboslarni real manbalar bo'yicha qayta raqamlab,
+    'references' ro'yxatini haqiqiy manbalardan tuzadi (kod darajasida tekshiruv)."""
+    n = len(srcs)
+    assign: dict[int, int] = {}
+    order: list[int] = []
 
+    def repl(m: re.Match) -> str:
+        nums = [int(x) for x in re.split(r"[;,]", m.group(1)) if x.strip().isdigit()]
+        new = []
+        for old in nums:
+            if 1 <= old <= n:
+                if old not in assign:
+                    order.append(old)
+                    assign[old] = len(order)
+                new.append(assign[old])
+        if not new:
+            return ""
+        return "[" + "; ".join(str(x) for x in sorted(set(new))) + "]"
+
+    fields = ["body"] if is_thesis else [
+        "introduction", "methods", "results", "discussion", "conclusion"
+    ]
+    for f in fields:
+        if article.get(f):
+            txt = _CIT_RE.sub(repl, article[f])
+            txt = re.sub(r"\s+([.,;:])", r"\1", txt)  # bo'sh iqtibos izlari
+            txt = re.sub(r"[ \t]{2,}", " ", txt)
+            article[f] = txt
+
+    if order:
+        article["references"] = [srcs[old - 1].gost() for old in order]
+    else:
+        # Model iqtibos bermagan bo'lsa ham — ro'yxat real manbalardan bo'lsin
+        limit = 10 if is_thesis else 15
+        article["references"] = [s.gost() for s in srcs[:limit]]
+
+
+async def generate_article(req: ArticleRequest) -> dict:
+    """Maqola yoki tezisni real manbalar asosida generatsiya qiladi."""
+    is_thesis = req.work_type == config.WORK_THESIS
+
+    # 1) Real manbalarni topish (best-effort — tarmoq ishlamasa, modelга tayanamiz)
+    want = 12 if is_thesis else 24
+    srcs: list = []
+    try:
+        srcs = await sources.find_sources(req.topic, req.field, _queries(req), want=want)
+        logger.info("Topilgan manbalar: %d (%s)", len(srcs), req.topic[:40])
+    except Exception:  # noqa: BLE001
+        logger.warning("Manba qidirishда xatolik", exc_info=True)
+    evidence = sources.build_evidence(srcs) if srcs else ""
+
+    # 2) Generatsiya
+    prompt = (_thesis_prompt(req, evidence) if is_thesis
+              else _article_prompt(req, evidence))
+    schema = THESIS_SCHEMA if is_thesis else ARTICLE_SCHEMA
     max_tokens = min(48000, 6000 + max(1, req.pages) * WORDS_PER_PAGE * 4)
 
     async with _client.messages.stream(
@@ -250,6 +337,11 @@ async def generate_article(req: ArticleRequest) -> dict:
     text = next((b.text for b in message.content if b.type == "text"), "")
     article = json.loads(text)
     article["work_type"] = req.work_type
+
+    # 3) Iqtiboslarni real manbalarga bog'lash
+    if srcs:
+        _apply_citations(article, srcs, is_thesis)
+
     if req.lang == "uz":
         article = _normalize_tree(article)
     return article
