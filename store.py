@@ -40,6 +40,8 @@ def _init() -> None:
                 pages       INTEGER,
                 amount      INTEGER,        -- so'mda
                 premium     INTEGER DEFAULT 0,  -- 1 = jadval+diagrammali (premium)
+                work_type   TEXT DEFAULT 'article',  -- 'article' | 'thesis'
+                extra       TEXT DEFAULT '',         -- qo'shimcha istaklar
                 status      TEXT,
                 created_at  INTEGER,
                 paid_at     INTEGER,
@@ -48,10 +50,16 @@ def _init() -> None:
             )
             """
         )
-        # Eski bazalar uchun migratsiya — 'premium' ustuni bo'lmasa qo'shamiz
+        # Eski bazalar uchun migratsiya — yangi ustunlarni qo'shamiz
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(orders)")}
         if "premium" not in cols:
             conn.execute("ALTER TABLE orders ADD COLUMN premium INTEGER DEFAULT 0")
+        if "work_type" not in cols:
+            conn.execute(
+                "ALTER TABLE orders ADD COLUMN work_type TEXT DEFAULT 'article'"
+            )
+        if "extra" not in cols:
+            conn.execute("ALTER TABLE orders ADD COLUMN extra TEXT DEFAULT ''")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS payme_tx (
@@ -79,8 +87,9 @@ def _create_order(data: dict[str, Any]) -> str:
         conn.execute(
             """INSERT INTO orders
                (order_id, user_id, chat_id, lang, topic, field, author,
-                keywords, pages, amount, premium, status, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                keywords, pages, amount, premium, work_type, extra,
+                status, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 order_id,
                 data["user_id"],
@@ -93,6 +102,8 @@ def _create_order(data: dict[str, Any]) -> str:
                 data["pages"],
                 data["amount"],
                 1 if data.get("premium") else 0,
+                data.get("work_type", "article"),
+                data.get("extra", ""),
                 CREATED,
                 int(time.time()),
             ),

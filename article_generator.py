@@ -1,4 +1,4 @@
-"""Claude API orqali OAK talablariga mos ilmiy maqola generatsiyasi."""
+"""Claude API orqali OAK talablariga mos ilmiy maqola / tezis generatsiyasi."""
 from __future__ import annotations
 
 import copy
@@ -11,135 +11,113 @@ import config
 
 _client = AsyncAnthropic(api_key=config.ANTHROPIC_API_KEY)
 
-# Maqola tana qismi qaysi tilda yoziladi (interfeys tiliga bog'liq)
+# Maqola/tezis tana qismi qaysi tilda yoziladi
 BODY_LANGUAGE = {
-    "uz": "o'zbek tilida (kirill yoki lotin — mavzuga mos)",
+    "uz": "o'zbek tilida (lotin yozuvida)",
     "ru": "на русском языке",
+    "en": "in academic English",
 }
 
-# Maqola bo'limlari uchun JSON sxema — structured outputs valid JSON kafolatlaydi.
-ARTICLE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "udk": {"type": "string", "description": "UDK indeksi, masalan '330.34'"},
-        "title": {
-            "type": "object",
-            "properties": {
-                "uz": {"type": "string"},
-                "ru": {"type": "string"},
-                "en": {"type": "string"},
-            },
-            "required": ["uz", "ru", "en"],
-            "additionalProperties": False,
-        },
-        "annotation": {
-            "type": "object",
-            "properties": {
-                "uz": {"type": "string"},
-                "ru": {"type": "string"},
-                "en": {"type": "string"},
-            },
-            "required": ["uz", "ru", "en"],
-            "additionalProperties": False,
-        },
-        "keywords": {
-            "type": "object",
-            "properties": {
-                "uz": {"type": "array", "items": {"type": "string"}},
-                "ru": {"type": "array", "items": {"type": "string"}},
-                "en": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["uz", "ru", "en"],
-            "additionalProperties": False,
-        },
-        "introduction": {"type": "string", "description": "Kirish — to'liq paragraflar"},
-        "main_part": {
-            "type": "string",
-            "description": "Asosiy qism: tahlil, usullar, muhokama. Bir necha paragraf.",
-        },
-        "results": {
-            "type": "string",
-            "description": "Natijalar va ularning tahlili.",
-        },
-        "conclusion": {"type": "string", "description": "Xulosa va takliflar."},
-        "references": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Foydalanilgan adabiyotlar ro'yxati, GOST uslubida.",
-        },
-    },
-    "required": [
-        "udk",
-        "title",
-        "annotation",
-        "keywords",
-        "introduction",
-        "main_part",
-        "results",
-        "conclusion",
-        "references",
-    ],
-    "additionalProperties": False,
-}
-
-# --- Premium (jadval + diagramma) qo'shimcha sxemasi ---
-# Jadval va diagrammalar maqolaning asosiy tilida (bitta til) bo'ladi.
+# --- Premium (jadval + diagramma) sxema qismlari ---
 _TABLE_SCHEMA = {
     "type": "array",
-    "description": "Maqola natijalarini ko'rsatadigan jadvallar (asosiy tilda).",
+    "description": "Natijalarni ko'rsatadigan jadvallar (asosiy tilda).",
     "items": {
         "type": "object",
         "properties": {
             "title": {"type": "string", "description": "Jadval sarlavhasi"},
-            "headers": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Ustun nomlari",
-            },
+            "headers": {"type": "array", "items": {"type": "string"}},
             "rows": {
                 "type": "array",
                 "items": {"type": "array", "items": {"type": "string"}},
-                "description": "Qatorlar; har biri ustunlar soniga teng",
             },
+            "source": {"type": "string", "description": "Manba (yoki bo'sh)"},
         },
-        "required": ["title", "headers", "rows"],
+        "required": ["title", "headers", "rows", "source"],
         "additionalProperties": False,
     },
 }
 
 _CHART_SCHEMA = {
     "type": "array",
-    "description": "Diagrammalar (ustunli/doira/chiziqli) — asosiy tilda.",
+    "description": "Diagrammalar (bar/pie/line) — asosiy tilda.",
     "items": {
         "type": "object",
         "properties": {
             "type": {"type": "string", "enum": ["bar", "pie", "line"]},
-            "title": {"type": "string", "description": "Diagramma sarlavhasi"},
-            "labels": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Kategoriya nomlari",
-            },
-            "values": {
-                "type": "array",
-                "items": {"type": "number"},
-                "description": "Son qiymatlar; labels bilan teng uzunlikda",
-            },
-            "x_label": {"type": "string", "description": "X o'qi nomi (bar/line)"},
-            "y_label": {"type": "string", "description": "Y o'qi nomi (bar/line)"},
+            "title": {"type": "string"},
+            "labels": {"type": "array", "items": {"type": "string"}},
+            "values": {"type": "array", "items": {"type": "number"}},
+            "x_label": {"type": "string"},
+            "y_label": {"type": "string"},
+            "source": {"type": "string"},
         },
-        "required": ["type", "title", "labels", "values", "x_label", "y_label"],
+        "required": ["type", "title", "labels", "values", "x_label", "y_label", "source"],
         "additionalProperties": False,
     },
 }
 
+_TRILANG = {
+    "type": "object",
+    "properties": {
+        "uz": {"type": "string"},
+        "ru": {"type": "string"},
+        "en": {"type": "string"},
+    },
+    "required": ["uz", "ru", "en"],
+    "additionalProperties": False,
+}
 
-def _premium_schema() -> dict:
-    schema = copy.deepcopy(ARTICLE_SCHEMA)
-    schema["properties"]["tables"] = _TABLE_SCHEMA
-    schema["properties"]["charts"] = _CHART_SCHEMA
-    schema["required"] = schema["required"] + ["tables", "charts"]
-    return schema
+_TRILANG_LIST = {
+    "type": "object",
+    "properties": {
+        "uz": {"type": "array", "items": {"type": "string"}},
+        "ru": {"type": "array", "items": {"type": "string"}},
+        "en": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["uz", "ru", "en"],
+    "additionalProperties": False,
+}
+
+# --- Maqola sxemasi (IMRAD) ---
+ARTICLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "udk": {"type": "string", "description": "UDK/UO'K indeksi"},
+        "title": _TRILANG,
+        "annotation": _TRILANG,
+        "keywords": _TRILANG_LIST,
+        "introduction": {"type": "string", "description": "Kirish"},
+        "methods": {"type": "string", "description": "Materiallar va metodlar"},
+        "results": {"type": "string", "description": "Natijalar"},
+        "discussion": {"type": "string", "description": "Muhokama"},
+        "conclusion": {"type": "string", "description": "Xulosa"},
+        "references": {"type": "array", "items": {"type": "string"}},
+        "tables": _TABLE_SCHEMA,
+        "charts": _CHART_SCHEMA,
+    },
+    "required": [
+        "udk", "title", "annotation", "keywords",
+        "introduction", "methods", "results", "discussion", "conclusion",
+        "references", "tables", "charts",
+    ],
+    "additionalProperties": False,
+}
+
+# --- Tezis sxemasi (yaxlit matn, bir tilda) ---
+THESIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "udk": {"type": "string", "description": "UDK/UO'K indeksi"},
+        "title": {"type": "string", "description": "Sarlavha (tanlangan tilda)"},
+        "annotation": {"type": "string", "description": "Annotatsiya 40–60 so'z"},
+        "keywords": {"type": "array", "items": {"type": "string"}},
+        "body": {"type": "string", "description": "Yaxlit matn (ichki sarlavhasiz)"},
+        "references": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["udk", "title", "annotation", "keywords", "body", "references"],
+    "additionalProperties": False,
+}
 
 
 @dataclass
@@ -148,80 +126,114 @@ class ArticleRequest:
     field: str
     author: str
     keywords: str
-    lang: str  # interfeys/tana tili: "uz" yoki "ru"
-    pages: int = 5  # maqola hajmi (bet soni)
-    premium: bool = False  # jadval + diagrammali (premium) variant
+    lang: str  # tana/kontent tili: "uz" | "ru" | "en"
+    pages: int = 5
+    work_type: str = config.WORK_ARTICLE  # "article" | "thesis"
+    extra: str = ""  # qo'shimcha istaklar
 
 
-# Bir A4 bet taxminan shuncha so'z (Times New Roman 14pt) — hajmni shunga moslaymiz
-WORDS_PER_PAGE = 450
+# Bir A4 bet taxminan shuncha so'z (TNR 14, interval 1,5)
+WORDS_PER_PAGE = 270
 
 
-def _build_prompt(req: ArticleRequest) -> str:
-    body_lang = BODY_LANGUAGE.get(req.lang, BODY_LANGUAGE["uz"])
-    keywords_note = (
+def _note(value: str, default: str) -> str:
+    v = (value or "").strip()
+    return v if v and v not in {"—", "-"} else default
+
+
+def _common_head(req: ArticleRequest, body_lang: str) -> str:
+    author_note = _note(req.author, "Muallif ko'rsatilmagan.")
+    kw_note = (
         f"Foydalanuvchi taklif qilgan kalit so'zlar: {req.keywords}."
-        if req.keywords and req.keywords.strip() not in {"—", "-"}
-        else "Kalit so'zlarni mavzuga qarab o'zingiz tanlang."
+        if _note(req.keywords, "") else "Kalit so'zlarni mavzuga qarab tanlang."
     )
-    author_note = (
-        f"Muallif: {req.author}."
-        if req.author and req.author.strip() not in {"—", "-"}
-        else "Muallif ko'rsatilmagan."
-    )
-    target_words = max(1, req.pages) * WORDS_PER_PAGE
-    premium_note = ""
-    if req.premium:
-        premium_note = (
-            "\n\nPREMIUM TALABLARI (jadval + diagramma):\n"
-            "- 'tables': 1–2 ta mazmunli jadval bering (natijalarni aks ettiruvchi). "
-            "Har bir jadvalda sarlavha, ustun nomlari (headers) va qatorlar (rows) "
-            "bo'lsin; har bir qatorda ustunlar soniga teng katak bo'lsin.\n"
-            "- 'charts': 1–2 ta diagramma bering (type: 'bar', 'pie' yoki 'line'). "
-            "labels va values teng uzunlikda, values — faqat sonlar. bar/line uchun "
-            "x_label va y_label ni to'ldiring (pie uchun bo'sh qatordan foydalaning).\n"
-            "- Jadval va diagrammalardagi BARCHA matn (sarlavha, ustun nomlari, "
-            f"belgilar, o'q nomlari) FAQAT {body_lang} bo'lsin (bitta tilda).\n"
-            "- Jadval/diagramma ma'lumotlari maqola matni (ayniqsa Natijalar) bilan "
-            "mos va mantiqan asoslangan bo'lsin."
-        )
+    extra_note = _note(req.extra, "")
+    extra_line = f"\nQO'SHIMCHA ISTAKLAR: {extra_note}\n" if extra_note else ""
     return (
-        "Siz O'zbekiston Oliy attestatsiya komissiyasi (OAK/ВАК) talablariga "
-        "to'liq mos ilmiy maqola yozadigan tajribali ilmiy muharrirsiz.\n\n"
         f"MAVZU: {req.topic}\n"
         f"ILMIY SOHA: {req.field}\n"
-        f"{author_note}\n"
-        f"{keywords_note}\n"
-        f"HAJM: maqola taxminan {req.pages} ta A4 bet bo'lsin, ya'ni asosiy matn "
-        f"(kirish + asosiy qism + natijalar + xulosa) jami taxminan {target_words} "
-        "so'zdan iborat bo'lsin. Bo'limlarni shu hajmga mutanosib taqsimlang.\n\n"
-        f"Maqolaning asosiy matnini {body_lang} yozing. "
-        "Annotatsiya va kalit so'zlarni esa UCHTA tilda bering: "
-        "o'zbek (uz), rus (ru) va ingliz (en).\n\n"
-        "TALABLAR:\n"
-        "- UDK indeksini mavzuga mos to'g'ri tanlang.\n"
-        "- Annotatsiya har bir tilda 4–6 jumladan iborat bo'lsin.\n"
-        "- Har bir tilda 6–10 ta kalit so'z bering.\n"
-        "- Kirish: muammoning dolzarbligi, maqsad va vazifalar.\n"
-        "- Asosiy qism: ilmiy tahlil, usullar, mavjud yondashuvlar muhokamasi "
-        "(bir necha to'liq paragraf, akademik uslub).\n"
-        "- Natijalar: aniq, asoslangan natijalar va ularning tahlili.\n"
-        "- Xulosa: asosiy xulosalar va amaliy takliflar.\n"
-        "- Foydalanilgan adabiyotlar: 8–15 ta manba, GOST bibliografik uslubida, "
-        "ishonchli va mavzuga mos (mualliflar, sarlavha, nashr, yil, sahifa).\n"
-        "- Matn ilmiy, ravon va plagiatsiz, mantiqiy izchil bo'lsin.\n"
-        "- Paragraflar orasida bo'sh qatordan foydalaning."
-        f"{premium_note}"
+        f"MUALLIF: {author_note}\n"
+        f"{kw_note}\n"
+        f"{extra_line}"
+        f"Asosiy matn {body_lang} yozilsin.\n"
     )
+
+
+def _article_prompt(req: ArticleRequest) -> str:
+    body_lang = BODY_LANGUAGE.get(req.lang, BODY_LANGUAGE["uz"])
+    target_words = max(1, req.pages) * WORDS_PER_PAGE
+    return (
+        "Siz O'zbekiston OAK (VAK) talablariga to'liq mos ilmiy maqola yozadigan "
+        "tajribali ilmiy muharrirsiz. Maqola IMRAD tuzilmasida bo'lsin.\n\n"
+        f"{_common_head(req, body_lang)}"
+        f"HAJM: taxminan {req.pages} A4 bet, ya'ni asosiy matn jami ~{target_words} "
+        "so'z. Bo'limlarni shu hajmga mutanosib taqsimlang.\n\n"
+        "TALABLAR:\n"
+        "- UDK indeksini to'g'ri tanlang.\n"
+        "- Sarlavha, annotatsiya va kalit so'zlar UCHTA tilda (uz, ru, en). "
+        "Annotatsiya har birida 150–250 so'z, kalit so'zlar 5–8 ta.\n"
+        "- Kirish: mavzuning dolzarbligi (umumiy fikr bilan boshlanadi), muammo, "
+        "adabiyotlar tahlili, maqsad va vazifalar.\n"
+        "- Materiallar va metodlar: tadqiqot obyekti, manbalar, metodlar.\n"
+        "- Natijalar: aniq natijalar; kamida 1–2 jadval va 1 diagramma "
+        "('tables' va 'charts' da), har biri matnda tilga olinsin.\n"
+        "- Muhokama: natijalar boshqa tadqiqotlar bilan qiyoslanadi.\n"
+        "- Xulosa: aniq xulosa va amaliy takliflar.\n"
+        "- Adabiyotlar: 15–25 ta manba, GOST R 7.0.5 uslubida, DOI/URL bilan.\n"
+        "- Ilmiy-akademik uslub, sun'iy intellekt izlarisiz, shablon iboralarsiz, "
+        "markdown belgilarisiz. Yaxlit abzaslar.\n"
+        "- Jadval/diagrammadagi barcha matn asosiy tilda bo'lsin."
+    )
+
+
+def _thesis_prompt(req: ArticleRequest) -> str:
+    body_lang = BODY_LANGUAGE.get(req.lang, BODY_LANGUAGE["uz"])
+    target_words = max(1, req.pages) * WORDS_PER_PAGE
+    return (
+        "Siz ilmiy konferensiya to'plami uchun tezis yozadigan tajribali ilmiy "
+        "muharrirsiz. Tezis — qisqa ilmiy matn, ICHKI SARLAVHALARSIZ (Kirish, "
+        "Natijalar kabi sarlavhalar qo'yilmaydi), yaxlit abzaslardan iborat.\n\n"
+        f"{_common_head(req, body_lang)}"
+        f"HAJM: taxminan {req.pages} A4 bet, ya'ni ~{target_words} so'z.\n\n"
+        "MATN MANTIQIY TARTIBI (sarlavhasiz): 1) mavzuning dolzarbligi (umumiy "
+        "fikr bilan boshlanadi); 2) muammo va maqsad; 3) metodlar (1–2 jumla); "
+        "4) asosiy natijalar/ilmiy g'oyalar (eng katta qism); 5) xulosa va taklif.\n\n"
+        "TALABLAR:\n"
+        "- UDK indeksini to'g'ri tanlang.\n"
+        "- Sarlavha, annotatsiya va kalit so'zlar FAQAT tanlangan tilda.\n"
+        "- Annotatsiya 40–60 so'z, kalit so'zlar 4–6 ta.\n"
+        "- Adabiyotlar: 6–10 ta real, GOST R 7.0.5 uslubida, DOI/URL bilan.\n"
+        "- Ilmiy-akademik uslub, sun'iy intellekt izlarisiz, markdown belgilarisiz.\n"
+        "- 'body' — yaxlit matn, ichki sarlavhalarsiz."
+    )
+
+
+def normalize_uz(text: str) -> str:
+    """O'zbek lotin imlosi: o' -> oʻ, g' -> gʻ, qolgan ' -> ʼ (tutuq belgisi)."""
+    if not text:
+        return text
+    for a, b in (("o'", "oʻ"), ("O'", "Oʻ"), ("g'", "gʻ"), ("G'", "Gʻ")):
+        text = text.replace(a, b)
+    return text.replace("'", "ʼ").replace("’", "ʼ")
+
+
+def _normalize_tree(obj):
+    if isinstance(obj, str):
+        return normalize_uz(obj)
+    if isinstance(obj, list):
+        return [_normalize_tree(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _normalize_tree(v) for k, v in obj.items()}
+    return obj
 
 
 async def generate_article(req: ArticleRequest) -> dict:
-    """Maqolani generatsiya qiladi va bo'limlar dict'ini qaytaradi."""
-    prompt = _build_prompt(req)
-    schema = _premium_schema() if req.premium else ARTICLE_SCHEMA
+    """Maqola yoki tezisni generatsiya qiladi va bo'limlar dict'ini qaytaradi."""
+    is_thesis = req.work_type == config.WORK_THESIS
+    prompt = _thesis_prompt(req) if is_thesis else _article_prompt(req)
+    schema = THESIS_SCHEMA if is_thesis else ARTICLE_SCHEMA
 
-    # Hajmga qarab max_tokens ni moslaymiz (kirill matn so'ziga ~2.5 token).
-    max_tokens = min(48000, 6000 + max(1, req.pages) * WORDS_PER_PAGE * 3)
+    max_tokens = min(48000, 6000 + max(1, req.pages) * WORDS_PER_PAGE * 4)
 
     async with _client.messages.stream(
         model=config.CLAUDE_MODEL,
@@ -236,4 +248,8 @@ async def generate_article(req: ArticleRequest) -> dict:
         message = await stream.get_final_message()
 
     text = next((b.text for b in message.content if b.type == "text"), "")
-    return json.loads(text)
+    article = json.loads(text)
+    article["work_type"] = req.work_type
+    if req.lang == "uz":
+        article = _normalize_tree(article)
+    return article

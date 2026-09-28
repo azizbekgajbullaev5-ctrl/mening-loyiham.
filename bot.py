@@ -41,14 +41,73 @@ def get_lang(user_id: int) -> str:
 
 
 class Form(StatesGroup):
+    work_type = State()
+    language = State()
     topic = State()
     field = State()
+    field_other = State()
     author = State()
     keywords = State()
     pages = State()
-    kind = State()
+    extra = State()
+    confirm = State()
     method = State()
     payment = State()
+
+
+# Ilmiy sohalar — tugmalar (til bo'yicha ko'rinadigan nom)
+FIELDS = [
+    ("pedagogika", {"uz": "Pedagogika", "ru": "Педагогика", "en": "Pedagogy"}),
+    ("iqtisodiyot", {"uz": "Iqtisodiyot", "ru": "Экономика", "en": "Economics"}),
+    ("filologiya", {"uz": "Filologiya", "ru": "Филология", "en": "Philology"}),
+    ("tibbiyot", {"uz": "Tibbiyot", "ru": "Медицина", "en": "Medicine"}),
+    ("huquq", {"uz": "Huquq", "ru": "Юриспруденция", "en": "Law"}),
+    ("texnika", {"uz": "Texnika fanlari", "ru": "Технические науки",
+                 "en": "Engineering"}),
+    ("aniq", {"uz": "Aniq fanlar", "ru": "Точные науки", "en": "Exact sciences"}),
+    ("ijtimoiy", {"uz": "Ijtimoiy fanlar", "ru": "Социальные науки",
+                  "en": "Social sciences"}),
+]
+_FIELD_MAP = {fid: names for fid, names in FIELDS}
+
+
+def _field_name(fid: str, lang: str) -> str:
+    names = _FIELD_MAP.get(fid, {})
+    return names.get(lang) or names.get("uz") or fid
+
+
+def _worktype_keyboard(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(lang, "btn_article"), callback_data="wt:article")],
+            [InlineKeyboardButton(text=t(lang, "btn_thesis"), callback_data="wt:thesis")],
+        ]
+    )
+
+
+def _language_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=label, callback_data=f"wlang:{code}")]
+            for code, label in config.CONTENT_LANGUAGES.items()
+        ]
+    )
+
+
+def _field_keyboard(lang: str) -> InlineKeyboardMarkup:
+    rows = []
+    pair = []
+    for fid, _names in FIELDS:
+        pair.append(InlineKeyboardButton(text=_field_name(fid, lang),
+                                         callback_data=f"fld:{fid}"))
+        if len(pair) == 2:
+            rows.append(pair)
+            pair = []
+    if pair:
+        rows.append(pair)
+    rows.append([InlineKeyboardButton(text=t(lang, "btn_field_other"),
+                                      callback_data="fld:other")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def fmt_sum(value: int) -> str:
@@ -97,8 +156,8 @@ async def cmd_help(message: Message) -> None:
         t(
             lang,
             "help",
-            price=fmt_sum(config.PRICE_PER_PAGE),
-            price_premium=fmt_sum(config.PRICE_PER_PAGE_PREMIUM),
+            article=fmt_sum(config.PRICE_ARTICLE_PER_PAGE),
+            thesis=fmt_sum(config.PRICE_THESIS_PER_PAGE),
         )
     )
 
@@ -158,44 +217,96 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
     await message.answer(t(lang, "cancelled"))
 
 
+async def _start_order(target: Message, state: FSMContext, lang: str) -> None:
+    await state.clear()
+    await state.set_state(Form.work_type)
+    await target.answer(t(lang, "choose_worktype"),
+                        reply_markup=_worktype_keyboard(lang))
+
+
 @dp.message(Command("new"))
 async def cmd_new(message: Message, state: FSMContext) -> None:
-    lang = get_lang(message.from_user.id)
-    await state.clear()
-    await state.set_state(Form.topic)
-    await message.answer(t(lang, "ask_topic"))
+    await _start_order(message, state, get_lang(message.from_user.id))
 
 
 @dp.callback_query(F.data == "new_order")
 async def on_new_order(callback: CallbackQuery, state: FSMContext) -> None:
-    """Maqola yetkazilgandan keyingi 'Yangi maqola' tugmasi — yangi buyurtma."""
-    lang = get_lang(callback.from_user.id)
+    """Yetkazilgandan keyingi 'Yangi ish' tugmasi — yangi buyurtma."""
     await callback.answer()
-    await state.clear()
-    await state.set_state(Form.topic)
     if callback.message:
+        await _start_order(callback.message, state, get_lang(callback.from_user.id))
+
+
+@dp.callback_query(Form.work_type, F.data.startswith("wt:"))
+async def on_work_type(callback: CallbackQuery, state: FSMContext) -> None:
+    work_type = callback.data.split(":", 1)[1]
+    if work_type not in (config.WORK_ARTICLE, config.WORK_THESIS):
+        work_type = config.WORK_ARTICLE
+    lang = get_lang(callback.from_user.id)
+    await state.update_data(work_type=work_type)
+    await callback.answer()
+    if callback.message:
+        await state.set_state(Form.language)
+        await callback.message.answer(t(lang, "ask_work_language"),
+                                      reply_markup=_language_keyboard())
+
+
+@dp.callback_query(Form.language, F.data.startswith("wlang:"))
+async def on_work_language(callback: CallbackQuery, state: FSMContext) -> None:
+    lang = callback.data.split(":", 1)[1]
+    if lang not in config.CONTENT_LANGUAGES:
+        lang = "uz"
+    _user_lang[callback.from_user.id] = lang  # interfeys ham shu tilda
+    await state.update_data(lang=lang)
+    await callback.answer()
+    if callback.message:
+        await state.set_state(Form.topic)
         await callback.message.answer(t(lang, "ask_topic"))
+
+
+def _flang(data: dict, user_id: int) -> str:
+    return data.get("lang") or get_lang(user_id)
 
 
 @dp.message(Form.topic)
 async def step_topic(message: Message, state: FSMContext) -> None:
-    lang = get_lang(message.from_user.id)
+    data = await state.get_data()
+    lang = _flang(data, message.from_user.id)
     await state.update_data(topic=message.text or "")
     await state.set_state(Form.field)
-    await message.answer(t(lang, "ask_field"))
+    await message.answer(t(lang, "ask_field"), reply_markup=_field_keyboard(lang))
 
 
-@dp.message(Form.field)
-async def step_field(message: Message, state: FSMContext) -> None:
-    lang = get_lang(message.from_user.id)
+@dp.callback_query(Form.field, F.data.startswith("fld:"))
+async def on_field(callback: CallbackQuery, state: FSMContext) -> None:
+    fid = callback.data.split(":", 1)[1]
+    data = await state.get_data()
+    lang = _flang(data, callback.from_user.id)
+    await callback.answer()
+    if not callback.message:
+        return
+    if fid == "other":
+        await state.set_state(Form.field_other)
+        await callback.message.answer(t(lang, "ask_field_other"))
+        return
+    await state.update_data(field=_field_name(fid, lang))
+    await state.set_state(Form.author)
+    await callback.message.answer(t(lang, "ask_author_full"))
+
+
+@dp.message(Form.field_other)
+async def step_field_other(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    lang = _flang(data, message.from_user.id)
     await state.update_data(field=message.text or "")
     await state.set_state(Form.author)
-    await message.answer(t(lang, "ask_author"))
+    await message.answer(t(lang, "ask_author_full"))
 
 
 @dp.message(Form.author)
 async def step_author(message: Message, state: FSMContext) -> None:
-    lang = get_lang(message.from_user.id)
+    data = await state.get_data()
+    lang = _flang(data, message.from_user.id)
     await state.update_data(author=message.text or "")
     await state.set_state(Form.keywords)
     await message.answer(t(lang, "ask_keywords"))
@@ -203,63 +314,83 @@ async def step_author(message: Message, state: FSMContext) -> None:
 
 @dp.message(Form.keywords)
 async def step_keywords(message: Message, state: FSMContext) -> None:
-    lang = get_lang(message.from_user.id)
+    data = await state.get_data()
+    lang = _flang(data, message.from_user.id)
     await state.update_data(keywords=message.text or "")
+    work_type = data.get("work_type", config.WORK_ARTICLE)
+    pmin, pmax = config.page_range(work_type)
     await state.set_state(Form.pages)
-    await message.answer(
-        t(lang, "ask_pages", min=config.MIN_PAGES, max=config.MAX_PAGES)
-    )
+    await message.answer(t(lang, "ask_pages", min=pmin, max=pmax))
 
 
 @dp.message(Form.pages)
 async def step_pages(message: Message, state: FSMContext) -> None:
-    lang = get_lang(message.from_user.id)
+    data = await state.get_data()
+    lang = _flang(data, message.from_user.id)
+    work_type = data.get("work_type", config.WORK_ARTICLE)
+    pmin, pmax = config.page_range(work_type)
     raw = (message.text or "").strip()
-    if not raw.isdigit() or not (config.MIN_PAGES <= int(raw) <= config.MAX_PAGES):
-        await message.answer(
-            t(lang, "invalid_pages", min=config.MIN_PAGES, max=config.MAX_PAGES)
-        )
+    if not raw.isdigit() or not (pmin <= int(raw) <= pmax):
+        await message.answer(t(lang, "invalid_pages", min=pmin, max=pmax))
         return
+    await state.update_data(pages=int(raw))
+    await state.set_state(Form.extra)
+    await message.answer(t(lang, "ask_extra"))
 
-    pages = int(raw)
-    await state.update_data(pages=pages)
 
-    # Maqola turini tanlash: Oddiy yoki Premium (jadval + diagramma)
-    await state.set_state(Form.kind)
+@dp.message(Form.extra)
+async def step_extra(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    lang = _flang(data, message.from_user.id)
+    await state.update_data(extra=message.text or "")
+    await _show_confirm(message, state, lang)
+
+
+def _dash(value: str) -> str:
+    v = (value or "").strip()
+    return v if v and v not in {"—", "-"} else "—"
+
+
+async def _show_confirm(target: Message, state: FSMContext, lang: str) -> None:
+    data = await state.get_data()
+    work_type = data.get("work_type", config.WORK_ARTICLE)
+    pages = int(data.get("pages", 1))
+    total = pages * config.price_per_page_for(work_type)
+    await state.update_data(total=total)
+    wt_key = "wt_thesis" if work_type == config.WORK_THESIS else "wt_article"
+    summary = t(
+        lang, "confirm_summary",
+        work=t(lang, wt_key),
+        wlang=config.CONTENT_LANGUAGES.get(data.get("lang", lang), lang),
+        topic=html.escape(_dash(data.get("topic", ""))[:200]),
+        field=html.escape(_dash(data.get("field", ""))[:100]),
+        author=html.escape(_dash(data.get("author", ""))[:200]),
+        keywords=html.escape(_dash(data.get("keywords", ""))[:200]),
+        pages=pages,
+        extra=html.escape(_dash(data.get("extra", ""))[:200]),
+        total=fmt_sum(total),
+    )
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=t(lang, "btn_kind_standard"), callback_data="kind:standard"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text=t(lang, "btn_kind_premium"), callback_data="kind:premium"
-                )
-            ],
+            [InlineKeyboardButton(text=t(lang, "btn_confirm"), callback_data="ord:ok")],
+            [InlineKeyboardButton(text=t(lang, "btn_edit"), callback_data="ord:edit")],
         ]
     )
-    await message.answer(
-        t(
-            lang,
-            "choose_kind",
-            pages=pages,
-            std=fmt_sum(pages * config.PRICE_PER_PAGE),
-            prem=fmt_sum(pages * config.PRICE_PER_PAGE_PREMIUM),
-        ),
-        reply_markup=kb,
-    )
+    await state.set_state(Form.confirm)
+    await target.answer(summary, reply_markup=kb)
 
 
-@dp.callback_query(Form.kind, F.data.startswith("kind:"))
-async def on_kind(callback: CallbackQuery, state: FSMContext) -> None:
-    premium = callback.data.split(":", 1)[1] == "premium"
-    lang = get_lang(callback.from_user.id)
+@dp.callback_query(Form.confirm, F.data == "ord:edit")
+async def on_edit(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    if callback.message:
+        await _start_order(callback.message, state, get_lang(callback.from_user.id))
+
+
+@dp.callback_query(Form.confirm, F.data == "ord:ok")
+async def on_confirm(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
-    pages = int(data.get("pages", 1))
-    total = pages * config.price_per_page(premium)
-    await state.update_data(premium=premium, total=total)
+    lang = _flang(data, callback.from_user.id)
     await callback.answer()
     if callback.message:
         await _offer_payment(callback.message, state, lang, callback.from_user.id)
@@ -334,14 +465,15 @@ async def _start_method(
         {
             "user_id": user_id,
             "chat_id": target.chat.id,
-            "lang": lang,
+            "lang": data.get("lang", lang),
             "topic": data.get("topic", ""),
             "field": data.get("field", ""),
             "author": data.get("author", ""),
             "keywords": data.get("keywords", ""),
             "pages": pages,
             "amount": total,
-            "premium": bool(data.get("premium")),
+            "work_type": data.get("work_type", config.WORK_ARTICLE),
+            "extra": data.get("extra", ""),
         }
     )
     if method == "payme":
@@ -368,20 +500,22 @@ async def on_receipt(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     await state.clear()
 
-    pages = int(data.get("pages", 5))
-    total = int(data.get("total", pages * config.PRICE_PER_PAGE))
+    work_type = data.get("work_type", config.WORK_ARTICLE)
+    pages = int(data.get("pages", config.page_range(work_type)[0]))
+    total = int(data.get("total", pages * config.price_per_page_for(work_type)))
     order_id = await store.create_order(
         {
             "user_id": message.from_user.id,
             "chat_id": message.chat.id,
-            "lang": lang,
+            "lang": data.get("lang", lang),
             "topic": data.get("topic", ""),
             "field": data.get("field", ""),
             "author": data.get("author", ""),
             "keywords": data.get("keywords", ""),
             "pages": pages,
             "amount": total,
-            "premium": bool(data.get("premium")),
+            "work_type": work_type,
+            "extra": data.get("extra", ""),
         }
     )
 

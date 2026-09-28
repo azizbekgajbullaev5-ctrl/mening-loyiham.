@@ -27,21 +27,30 @@ def _safe_filename(title: str) -> str:
     return name[:60] or "maqola"
 
 
+def _pick(value, lang: str, default: str = ""):
+    """Maqola (dict, 3 tilli) yoki tezis (satr/ro'yxat) qiymatini oladi."""
+    if isinstance(value, dict):
+        return value.get(lang) or value.get("uz") or default
+    return value if value else default
+
+
+def _title_of(article: dict, lang: str) -> str:
+    return _pick(article.get("title"), lang, "maqola") or "maqola"
+
+
 def _preview(article: dict, lang: str) -> str:
-    title = article.get("title", {})
-    annotation = article.get("annotation", {})
-    keywords = article.get("keywords", {}).get(lang) or []
+    kw = _pick(article.get("keywords"), lang, []) or []
     parts = []
     if article.get("udk"):
         parts.append(f"<b>UDK:</b> {html.escape(str(article['udk']))}")
-    head = title.get(lang) or title.get("uz", "")
+    head = _pick(article.get("title"), lang, "")
     if head:
         parts.append(f"<b>{html.escape(head)}</b>")
-    ann = annotation.get(lang) or annotation.get("uz", "")
+    ann = _pick(article.get("annotation"), lang, "")
     if ann:
         parts.append(html.escape(ann[:600]))
-    if keywords:
-        parts.append("<i>" + html.escape(", ".join(keywords)) + "</i>")
+    if kw:
+        parts.append("<i>" + html.escape(", ".join(kw)) + "</i>")
     text = "\n\n".join(parts)
     return text[:4000] if text else "—"
 
@@ -72,7 +81,8 @@ async def deliver_order(bot: Bot, order_id: str) -> None:
             keywords=order["keywords"],
             lang=lang,
             pages=int(order["pages"]),
-            premium=bool(order.get("premium")),
+            work_type=order.get("work_type") or "article",
+            extra=order.get("extra") or "",
         )
         article = await generate_article(req)
         docx_stream = build_docx(article, req.author, lang)
@@ -81,10 +91,7 @@ async def deliver_order(bot: Bot, order_id: str) -> None:
         await status.edit_text(t(lang, "done_text"))
         await bot.send_message(chat_id, _preview(article, lang))
 
-        title = article.get("title", {}).get(lang) or article.get("title", {}).get(
-            "uz", "maqola"
-        )
-        fname = _safe_filename(title)
+        fname = _safe_filename(_title_of(article, lang))
         await bot.send_document(
             chat_id,
             BufferedInputFile(docx_stream.read(), filename=fname + ".docx"),

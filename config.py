@@ -9,15 +9,47 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-8")
 
-# --- Narx sozlamalari ---
-PRICE_PER_PAGE = int(os.getenv("PRICE_PER_PAGE", "5000"))  # oddiy maqola — bir bet (so'm)
-# Premium (jadval + diagrammali) maqola — bir bet narxi (so'm)
+# --- Narx sozlamalari (eski — moslik uchun) ---
+PRICE_PER_PAGE = int(os.getenv("PRICE_PER_PAGE", "5000"))
 PRICE_PER_PAGE_PREMIUM = int(os.getenv("PRICE_PER_PAGE_PREMIUM", "8000"))
 MIN_PAGES = int(os.getenv("MIN_PAGES", "1"))
 MAX_PAGES = int(os.getenv("MAX_PAGES", "15"))
 
+# --- Ish turi: maqola / tezis ---
+WORK_ARTICLE = "article"
+WORK_THESIS = "thesis"
 
-def price_per_page(premium: bool) -> int:
+# Sahifa oralig'i (ish turiga qarab)
+ARTICLE_MIN_PAGES = int(os.getenv("ARTICLE_MIN_PAGES", "5"))
+ARTICLE_MAX_PAGES = int(os.getenv("ARTICLE_MAX_PAGES", "20"))
+THESIS_MIN_PAGES = int(os.getenv("THESIS_MIN_PAGES", "2"))
+THESIS_MAX_PAGES = int(os.getenv("THESIS_MAX_PAGES", "5"))
+
+# Bir bet narxi (ish turiga qarab, so'm)
+PRICE_ARTICLE_PER_PAGE = int(
+    os.getenv("PRICE_ARTICLE_PER_PAGE", str(PRICE_PER_PAGE_PREMIUM))
+)
+PRICE_THESIS_PER_PAGE = int(os.getenv("PRICE_THESIS_PER_PAGE", "6000"))
+
+# Qo'llab-quvvatlanadigan tillar (til kodi -> ko'rinadigan nom)
+CONTENT_LANGUAGES = {
+    "uz": "🇺🇿 O'zbekcha (lotin)",
+    "ru": "🇷🇺 Русский",
+    "en": "🇬🇧 English",
+}
+
+
+def page_range(work_type: str) -> tuple[int, int]:
+    if work_type == WORK_THESIS:
+        return THESIS_MIN_PAGES, THESIS_MAX_PAGES
+    return ARTICLE_MIN_PAGES, ARTICLE_MAX_PAGES
+
+
+def price_per_page_for(work_type: str) -> int:
+    return PRICE_THESIS_PER_PAGE if work_type == WORK_THESIS else PRICE_ARTICLE_PER_PAGE
+
+
+def price_per_page(premium: bool) -> int:  # eski — moslik uchun
     return PRICE_PER_PAGE_PREMIUM if premium else PRICE_PER_PAGE
 
 # --- Karta + chek (qo'lbola) usuli ---
