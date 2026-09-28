@@ -67,52 +67,53 @@ async def deliver_order(bot: Bot, order_id: str) -> None:
         logger.error("Buyurtma topilmadi: %s", order_id)
         return
 
-    lang = order["lang"]
+    clang = order["lang"] or "uz"  # ish (maqola/tezis) tili
+    ilang = "uz"                    # interfeys tili (doim o'zbek)
     chat_id = order["chat_id"]
 
     try:
-        await bot.send_message(chat_id, t(lang, "payment_confirmed"))
-        status = await bot.send_message(chat_id, t(lang, "generating"))
+        await bot.send_message(chat_id, t(ilang, "payment_confirmed"))
+        status = await bot.send_message(chat_id, t(ilang, "generating"))
 
         req = ArticleRequest(
             topic=order["topic"],
             field=order["field"],
             author=order["author"],
             keywords=order["keywords"],
-            lang=lang,
+            lang=clang,
             pages=int(order["pages"]),
             work_type=order.get("work_type") or "article",
             extra=order.get("extra") or "",
         )
         article = await generate_article(req)
-        docx_stream = build_docx(article, req.author, lang)
-        pdf_stream = build_pdf(article, req.author, lang)
+        docx_stream = build_docx(article, req.author, clang)
+        pdf_stream = build_pdf(article, req.author, clang)
 
-        await status.edit_text(t(lang, "done_text"))
-        await bot.send_message(chat_id, _preview(article, lang))
+        await status.edit_text(t(ilang, "done_text"))
+        await bot.send_message(chat_id, _preview(article, clang))
 
-        fname = _safe_filename(_title_of(article, lang))
+        fname = _safe_filename(_title_of(article, clang))
         await bot.send_document(
             chat_id,
             BufferedInputFile(docx_stream.read(), filename=fname + ".docx"),
-            caption=t(lang, "docx_caption"),
+            caption=t(ilang, "docx_caption"),
         )
         await bot.send_document(
             chat_id,
             BufferedInputFile(pdf_stream.read(), filename=fname + ".pdf"),
-            caption=t(lang, "pdf_caption"),
+            caption=t(ilang, "pdf_caption"),
         )
 
-        # Yakuniy xabar: "Yangi maqola" va "Shikoyat / Taklif" tugmalari
+        # Yakuniy xabar: "Yangi ish" va "Shikoyat / Taklif" tugmalari
         rows = [
-            [InlineKeyboardButton(text=t(lang, "btn_new_article"), callback_data="new_order")]
+            [InlineKeyboardButton(text=t(ilang, "btn_new_article"), callback_data="new_order")]
         ]
         fb = config.feedback_url()
         if fb:
-            rows.append([InlineKeyboardButton(text=t(lang, "btn_feedback"), url=fb)])
+            rows.append([InlineKeyboardButton(text=t(ilang, "btn_feedback"), url=fb)])
         await bot.send_message(
             chat_id,
-            t(lang, "after_delivery"),
+            t(ilang, "after_delivery"),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
         await store.set_status(order_id, store.DELIVERED, delivered=True)
@@ -122,7 +123,7 @@ async def deliver_order(bot: Bot, order_id: str) -> None:
         await store.set_status(order_id, store.PAID)
         try:
             await bot.send_message(
-                chat_id, t(lang, "error", err=html.escape(str(err)[:300]))
+                chat_id, t("uz", "error", err=html.escape(str(err)[:300]))
             )
         except Exception:  # noqa: BLE001
             pass

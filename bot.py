@@ -27,17 +27,15 @@ from article_generator import ArticleRequest, generate_article
 from docx_builder import build_docx
 from pdf_builder import build_pdf
 from fulfillment import deliver_order
-from locales import LANGUAGES, t
+from locales import t
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Foydalanuvchi tilini saqlash (oddiy xotira; konteyner qayta ishga tushsa tiklanadi)
-_user_lang: dict[int, str] = {}
-
 
 def get_lang(user_id: int) -> str:
-    return _user_lang.get(user_id, "uz")
+    # Interfeys doim o'zbek (lotin) tilida
+    return "uz"
 
 
 class Form(StatesGroup):
@@ -115,38 +113,13 @@ def fmt_sum(value: int) -> str:
     return f"{value:,}".replace(",", " ")
 
 
-def language_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=label, callback_data=f"lang:{code}")]
-            for code, label in LANGUAGES.items()
-        ]
-    )
-
-
 dp = Dispatcher()
 
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer(t("uz", "choose_language"), reply_markup=language_keyboard())
-
-
-@dp.message(Command("lang"))
-async def cmd_lang(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    await message.answer(t("uz", "choose_language"), reply_markup=language_keyboard())
-
-
-@dp.callback_query(F.data.startswith("lang:"))
-async def on_language(callback: CallbackQuery, state: FSMContext) -> None:
-    lang = callback.data.split(":", 1)[1]
-    _user_lang[callback.from_user.id] = lang
-    await callback.answer()
-    if callback.message:
-        await callback.message.answer(t(lang, "lang_set"))
-        await callback.message.answer(t(lang, "welcome"))
+    await message.answer(t("uz", "welcome"))
 
 
 @dp.message(Command("help"))
@@ -242,30 +215,28 @@ async def on_work_type(callback: CallbackQuery, state: FSMContext) -> None:
     work_type = callback.data.split(":", 1)[1]
     if work_type not in (config.WORK_ARTICLE, config.WORK_THESIS):
         work_type = config.WORK_ARTICLE
-    lang = get_lang(callback.from_user.id)
     await state.update_data(work_type=work_type)
     await callback.answer()
     if callback.message:
-        await state.set_state(Form.language)
-        await callback.message.answer(t(lang, "ask_work_language"),
-                                      reply_markup=_language_keyboard())
+        await state.set_state(Form.topic)
+        await callback.message.answer(t("uz", "ask_topic"))
 
 
 @dp.callback_query(Form.language, F.data.startswith("wlang:"))
 async def on_work_language(callback: CallbackQuery, state: FSMContext) -> None:
-    lang = callback.data.split(":", 1)[1]
-    if lang not in config.CONTENT_LANGUAGES:
-        lang = "uz"
-    _user_lang[callback.from_user.id] = lang  # interfeys ham shu tilda
-    await state.update_data(lang=lang)
+    """Buyurtma oxirida: ish qaysi tilda yozilishini tanlash."""
+    clang = callback.data.split(":", 1)[1]
+    if clang not in config.CONTENT_LANGUAGES:
+        clang = "uz"
+    await state.update_data(clang=clang)
     await callback.answer()
     if callback.message:
-        await state.set_state(Form.topic)
-        await callback.message.answer(t(lang, "ask_topic"))
+        await _show_confirm(callback.message, state, "uz")
 
 
 def _flang(data: dict, user_id: int) -> str:
-    return data.get("lang") or get_lang(user_id)
+    # Interfeys doim o'zbek (lotin) tilida
+    return "uz"
 
 
 @dp.message(Form.topic)
@@ -340,10 +311,11 @@ async def step_pages(message: Message, state: FSMContext) -> None:
 
 @dp.message(Form.extra)
 async def step_extra(message: Message, state: FSMContext) -> None:
-    data = await state.get_data()
-    lang = _flang(data, message.from_user.id)
     await state.update_data(extra=message.text or "")
-    await _show_confirm(message, state, lang)
+    # Eng oxirida: ish qaysi tilda yozilsin
+    await state.set_state(Form.language)
+    await message.answer(t("uz", "ask_work_language"),
+                         reply_markup=_language_keyboard())
 
 
 def _dash(value: str) -> str:
@@ -358,10 +330,11 @@ async def _show_confirm(target: Message, state: FSMContext, lang: str) -> None:
     total = pages * config.price_per_page_for(work_type)
     await state.update_data(total=total)
     wt_key = "wt_thesis" if work_type == config.WORK_THESIS else "wt_article"
+    clang = data.get("clang", "uz")
     summary = t(
         lang, "confirm_summary",
         work=t(lang, wt_key),
-        wlang=config.CONTENT_LANGUAGES.get(data.get("lang", lang), lang),
+        wlang=config.CONTENT_LANGUAGES.get(clang, clang),
         topic=html.escape(_dash(data.get("topic", ""))[:200]),
         field=html.escape(_dash(data.get("field", ""))[:100]),
         author=html.escape(_dash(data.get("author", ""))[:200]),
@@ -465,7 +438,7 @@ async def _start_method(
         {
             "user_id": user_id,
             "chat_id": target.chat.id,
-            "lang": data.get("lang", lang),
+            "lang": data.get("clang", "uz"),
             "topic": data.get("topic", ""),
             "field": data.get("field", ""),
             "author": data.get("author", ""),
@@ -507,7 +480,7 @@ async def on_receipt(message: Message, state: FSMContext) -> None:
         {
             "user_id": message.from_user.id,
             "chat_id": message.chat.id,
-            "lang": data.get("lang", lang),
+            "lang": data.get("clang", "uz"),
             "topic": data.get("topic", ""),
             "field": data.get("field", ""),
             "author": data.get("author", ""),

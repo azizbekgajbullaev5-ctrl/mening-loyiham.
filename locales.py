@@ -1,5 +1,10 @@
-"""Ikki tilli (o'zbek / rus) interfeys matnlari."""
+"""Bot interfeysi matnlari — hammasi o'zbek (lotin) tilida.
 
+Interfeys doim o'zbek lotin tilida. Mijoz tanlaydigan til faqat tayyorlanadigan
+maqola/tezis MATNIGA taalluqli (buyurtmaning oxirida so'raladi).
+"""
+
+# Maqola/tezis qaysi tillarda yozilishi mumkin (til kodi -> ko'rinadigan nom)
 LANGUAGES = {
     "uz": "🇺🇿 O'zbekcha",
     "ru": "🇷🇺 Русский",
@@ -8,556 +13,180 @@ LANGUAGES = {
 
 TEXTS = {
     "uz": {
-        "choose_language": "Тилни танланг / Выберите язык:",
         "welcome": (
-            "👋 Ассалому алейкум!\n\n"
-            "Мен <b>ОАК талаблари асосида илмий мақола</b> ёзиб берадиган ботман.\n\n"
-            "Мақола қуйидаги тузилишда тайёрланади:\n"
-            "• УДК\n"
-            "• Сарлавҳа\n"
-            "• Аннотация ва калит сўзлар (ўзбек, рус, инглиз)\n"
-            "• Кириш\n"
-            "• Асосий қисм (таҳлил ва усуллар)\n"
-            "• Натижалар ва уларнинг таҳлили\n"
-            "• Хулоса\n"
-            "• Фойдаланилган адабиётлар рўйхати\n\n"
-            "Бошлаш учун /new буйруғини юборинг."
+            "👋 Assalomu alaykum!\n\n"
+            "Men <b>OAK talablari asosida ilmiy maqola va tezis</b> yozib "
+            "beradigan botman.\n\n"
+            "Ish quyidagi tuzilishda tayyorlanadi:\n"
+            "• UDK, sarlavha, annotatsiya va kalit so'zlar\n"
+            "• Kirish · Materiallar va metodlar · Natijalar · Muhokama · Xulosa\n"
+            "• Foydalanilgan adabiyotlar ro'yxati\n\n"
+            "Boshlash uchun /new buyrug'ini yuboring."
         ),
-        "menu_new": "📝 Янги мақола ёзиш — /new",
-        "menu_lang": "🌐 Тилни ўзгартириш — /lang",
-        "menu_help": "ℹ️ Ёрдам — /help",
+        # --- Buyurtma dialogi ---
+        "choose_worktype": "🧩 <b>Ish turini tanlang:</b>",
+        "btn_article": "📄 Maqola",
+        "btn_thesis": "📝 Tezis",
         "ask_topic": (
-            "📌 <b>1/4</b> Мақола мавзусини киритинг.\n\n"
-            "Масалан: <i>«Рақамли иқтисодиёт шароитида кичик бизнесни ривожлантириш»</i>"
+            "📌 <b>Mavzuni</b> kiriting.\n\n"
+            "Masalan: <i>«Raqamli iqtisodiyot sharoitida kichik biznesni "
+            "rivojlantirish»</i>"
         ),
         "ask_field": (
-            "🔬 <b>2/4</b> Илмий соҳани (йўналишни) киритинг.\n\n"
-            "Масалан: <i>иқтисодиёт, педагогика, ахборот технологиялари, тиббиёт...</i>"
+            "🔬 <b>Ilmiy sohani tanlang</b> (yoki «Boshqa»ni bosib o'zingiz yozing):"
         ),
-        "ask_author": (
-            "✍️ <b>3/4</b> Муаллиф маълумотларини киритинг "
-            "(Ф.И.Ш., лавозим, муассаса).\n\n"
-            "Масалан: <i>Каримов А.А., таянч докторант, ТДИУ</i>\n\n"
-            "Агар кераксиз бўлса <b>—</b> белгисини юборинг."
+        "btn_field_other": "✍️ Boshqa",
+        "ask_field_other": "🔬 Ilmiy sohani (yo'nalishni) yozing:",
+        "ask_author_full": (
+            "✍️ <b>Muallif ma'lumotlari:</b>\n"
+            "F.I.Sh., ish/o'qish joyi, lavozim yoki maqom (talaba, magistrant, "
+            "doktorant, o'qituvchi…), e-mail.\n"
+            "Ixtiyoriy: ORCID, ilmiy rahbar.\n\n"
+            "Hammasini bir xabarda yozing. Kerak bo'lmasa <b>—</b> yuboring."
         ),
         "ask_keywords": (
-            "🏷 <b>4/5</b> Калит сўзларни киритинг (вергул билан ажратиб).\n\n"
-            "Агар ботнинг ўзи танласин десангиз <b>—</b> белгисини юборинг."
+            "🏷 <b>Kalit so'zlarni</b> kiriting (vergul bilan ajratib).\n\n"
+            "Bot o'zi tanlasin desangiz <b>—</b> yuboring."
         ),
         "ask_pages": (
-            "📄 <b>5/5</b> Мақола неча бет бўлсин?\n\n"
-            "{min} дан {max} гача рақам киритинг."
+            "📄 Ish necha bet bo'lsin?\n\n"
+            "{min} dan {max} gacha raqam kiriting."
         ),
-        "choose_kind": (
-            "🧩 Мақола турини танланг ({pages} бет):\n\n"
-            "📄 <b>Оддий</b> — матн, аннотация ва адабиётлар.\n"
-            "    Нархи: <b>{std} сўм</b>\n\n"
-            "📊 <b>Premium</b> — жадвал ва диаграммалар билан.\n"
-            "    Нархи: <b>{prem} сўм</b>"
+        "invalid_pages": "⚠️ Iltimos, {min} dan {max} gacha butun raqam kiriting.",
+        "ask_extra": (
+            "📎 <b>Qo'shimcha istaklar</b> (ixtiyoriy):\n"
+            "tadqiqot obyekti/hududi, jurnal/konferensiya nomi va h.k.\n"
+            "Kerak bo'lmasa <b>—</b> yuboring."
         ),
-        "btn_kind_standard": "📄 Оддий",
-        "btn_kind_premium": "📊 Premium (жадвал+диаграмма)",
-        "invalid_pages": (
-            "⚠️ Илтимос, {min} дан {max} гача бутун рақам киритинг."
+        "ask_work_language": (
+            "🌐 <b>Ish qaysi tilda yozilsin?</b>\n\n"
+            "Tanlagan tilingizda maqola/tezis tayyorlanadi."
+        ),
+        "confirm_summary": (
+            "📋 <b>Buyurtmani tekshiring:</b>\n\n"
+            "🧩 Turi: <b>{work}</b>\n"
+            "🌐 Til: <b>{wlang}</b>\n"
+            "📌 Mavzu: {topic}\n"
+            "🔬 Soha: {field}\n"
+            "✍️ Muallif: {author}\n"
+            "🏷 Kalit so'zlar: {keywords}\n"
+            "📄 Hajm: <b>{pages} bet</b>\n"
+            "📎 Qo'shimcha: {extra}\n\n"
+            "💰 Jami: <b>{total} so'm</b>"
+        ),
+        "btn_confirm": "✅ Tasdiqlash",
+        "btn_edit": "✏️ O'zgartirish",
+        "wt_article": "Maqola",
+        "wt_thesis": "Tezis",
+        # --- To'lov ---
+        "choose_method": (
+            "💳 To'lov usulini tanlang.\n\n"
+            "Ish hajmi: <b>{pages} bet</b>\n"
+            "Jami to'lov: <b>{total} so'm</b>"
+        ),
+        "btn_payme": "💳 Payme",
+        "btn_click": "💳 Click",
+        "btn_card": "🧾 Karta + chek",
+        "btn_pay": "💳 To'lash",
+        "online_pay_msg": (
+            "💳 Quyidagi tugma orqali to'lov qiling.\n"
+            "To'lov muvaffaqiyatli bo'lgach, ish <b>avtomatik</b> yuboriladi."
         ),
         "payment_info": (
-            "💳 <b>Тўлов</b>\n\n"
-            "Мақола ҳажми: <b>{pages} бет</b>\n"
-            "Жами тўлов: <b>{total} сўм</b>\n\n"
-            "Қуйидаги пластик картага тўлов қилинг:\n"
+            "💳 <b>To'lov</b>\n\n"
+            "Ish hajmi: <b>{pages} bet</b>\n"
+            "Jami to'lov: <b>{total} so'm</b>\n\n"
+            "Quyidagi plastik kartaga to'lov qiling:\n"
             "💳 <code>{card}</code>\n"
             "👤 {holder}\n\n"
-            "Тўлов қилгач, <b>тўлов чекини (скриншот/расм)</b> шу ерга юборинг — "
-            "тўлов тасдиқлангач мақола тайёрланиб юборилади."
+            "To'lov qilgach, <b>to'lov chekini (skrinshot/rasm)</b> shu yerga "
+            "yuboring — tasdiqlangach ish tayyorlanib yuboriladi."
         ),
         "need_receipt": (
-            "📸 Илтимос, тўлов чекини <b>расм (фото)</b> кўринишида юборинг."
+            "📸 Iltimos, to'lov chekini <b>rasm (foto)</b> ko'rinishida yuboring."
         ),
-        "receipt_ok": "✅ Чек қабул қилинди. Мақола тайёрланмоқда...",
+        "receipt_ok": "✅ Chek qabul qilindi. Ish tayyorlanmoqda...",
         "receipt_pending": (
-            "✅ Чекингиз қабул қилинди!\n\n"
-            "⏳ Тўлов текширилмоқда. Тасдиқлангач, мақола автоматик "
-            "тайёрланиб юборилади. Илтимос, кутиб туринг."
+            "✅ Chekingiz qabul qilindi!\n\n"
+            "⏳ To'lov tekshirilmoqda. Tasdiqlangach, ish avtomatik tayyorlanib "
+            "yuboriladi. Iltimos, kutib turing."
         ),
-        "payment_rejected": (
-            "❌ Афсуски, тўлов тасдиқланмади.\n\n"
-            "Илтимос, тўловни текшириб, чекни қайтадан юборинг ёки "
-            "/new орқали янги буюртма беринг."
-        ),
-        "btn_approve": "✅ Тасдиқлаш",
-        "btn_reject": "❌ Рад этиш",
-        "admin_approved": "✅ Тасдиқланди — мақола тайёрланмоқда.",
-        "admin_rejected": "❌ Рад этилди.",
-        "already_handled": "Бу буюртма аллақачон кўриб чиқилган.",
-        "your_id": (
-            "🆔 Сизнинг Telegram ID: <code>{id}</code>\n\n"
-            "Уни админ (эга) сифатида созлаш мумкин."
-        ),
-        "choose_method": (
-            "💳 Тўлов усулини танланг.\n\n"
-            "Мақола ҳажми: <b>{pages} бет</b>\n"
-            "Жами тўлов: <b>{total} сўм</b>"
-        ),
-        "btn_payme": "💳 Payme",
-        "btn_click": "💳 Click",
-        "btn_card": "🧾 Карта + чек",
-        "btn_pay": "💳 Тўлаш",
-        "online_pay_msg": (
-            "💳 Қуйидаги тугма орқали тўлов қилинг.\n"
-            "Тўлов муваффақиятли бўлгач, мақола <b>автоматик</b> юборилади."
-        ),
-        "payment_confirmed": "✅ Тўлов қабул қилинди! Раҳмат.",
-        "generating": (
-            "⏳ Мақола тайёрланмоқда... Бу 1–3 дақиқа давом этиши мумкин.\n"
-            "Илтимос, кутиб туринг."
-        ),
-        "done_text": "✅ Мақола тайёр! Қуйида матн ва Word (.docx) файли:",
-        "after_delivery": (
-            "🎉 Мақолангиз тайёр бўлди!\n\n"
-            "🆕 Янги мақола буюртма қилиш учун пастдаги тугмани босинг.\n"
-            "✍️ Фикр, шикоят ёки таклифингиз бўлса — биз билан боғланинг."
-        ),
-        "btn_new_article": "🆕 Янги мақола",
-        "btn_feedback": "✍️ Шикоят / Таклиф",
-        "docx_caption": "📄 Word форматидаги мақола",
-        "error": "❌ Хатолик юз берди:\n<code>{err}</code>\nҚайтадан /new орқали уриниб кўринг.",
-        "cancelled": "Бекор қилинди. Янги мақола учун /new юборинг.",
-        "help": (
-            "ℹ️ <b>Ёрдам</b>\n\n"
-            "/new — янги илмий мақола ёзиш\n"
-            "/status — буюртмаларингиз ҳолати\n"
-            "/lang — интерфейс тилини ўзгартириш\n"
-            "/cancel — жорий жараённи бекор қилиш\n"
-            "/help — ушбу ёрдам\n\n"
-            "Бот ОАК талаблари асосида мақола ва тезис тайёрлайди, Word ҳамда "
-            "PDF файлда юборади.\n"
-            "📄 Мақола — {article} сўм/бет\n"
-            "📝 Тезис — {thesis} сўм/бет\n"
-            "Тўловдан кейин иш тайёрланади."
-        ),
-        "lang_set": "✅ Тил ўзбекчага ўрнатилди.",
-        "skip_hint": "(ўтказиб юбориш учун — белгисини юборинг)",
         "receipt_forwarded": (
-            "🧾 Янги тўлов чеки!\n"
-            "👤 Мижоз: {user}\n"
-            "📄 Мавзу: {topic}\n"
-            "📃 Ҳажм: {pages} бет\n"
-            "💰 Сумма: {total} сўм"
+            "🧾 Yangi to'lov cheki!\n"
+            "👤 Mijoz: {user}\n"
+            "📄 Mavzu: {topic}\n"
+            "📃 Hajm: {pages} bet\n"
+            "💰 Summa: {total} so'm"
         ),
-        "pdf_caption": "📕 PDF форматидаги мақола",
-        "status_empty": "Сизда ҳали буюртмалар йўқ. /new орқали бошланг.",
-        "status_header": "📋 <b>Сўнгги буюртмаларингиз:</b>",
-        "status_line": (
-            "📄 {topic}\n"
-            "📃 {pages} бет · 💰 {total} сўм\n"
-            "📌 Ҳолат: {status}"
-        ),
-        "st_created": "⏳ Тўлов кутилмоқда",
-        "st_paid": "✅ Тўланган",
-        "st_delivering": "✍️ Тайёрланмоқда",
-        "st_delivered": "📨 Юборилган",
-        "st_cancelled": "❌ Бекор қилинган",
-        "stats_denied": "⛔ Бу буйруқ фақат админ учун.",
-        "stats_body": (
-            "📊 <b>Статистика</b>\n\n"
-            "Жами буюртмалар: <b>{total}</b>\n"
-            "Тўланган: <b>{paid}</b>\n"
-            "Юборилган: <b>{delivered}</b>\n"
-            "Жами даромад: <b>{revenue} сўм</b>"
-        ),
-        # --- Faza 1: ish turi / til / dialog ---
-        "choose_worktype": "🧩 <b>Иш турини танланг:</b>",
-        "btn_article": "📄 Мақола",
-        "btn_thesis": "📝 Тезис",
-        "ask_work_language": "🌐 <b>Иш қайси тилда ёзилсин?</b>",
-        "ask_field": (
-            "🔬 <b>Илмий соҳани танланг</b> (ёки «Бошқа»ни босиб ўзингиз ёзинг):"
-        ),
-        "btn_field_other": "✍️ Бошқа",
-        "ask_field_other": "🔬 Илмий соҳани (йўналишни) ёзинг:",
-        "ask_author_full": (
-            "✍️ <b>Муаллиф маълумотлари:</b>\n"
-            "Ф.И.Ш., иш/ўқиш жойи, лавозим ёки мақом (талаба, магистрант, "
-            "докторант, ўқитувчи…), e-mail.\n"
-            "Ихтиёрий: ORCID, илмий раҳбар.\n\n"
-            "Ҳаммасини бир хабарда ёзинг. Кераксиз бўлса <b>—</b> юборинг."
-        ),
-        "ask_extra": (
-            "📎 <b>Қўшимча истаклар</b> (ихтиёрий):\n"
-            "тадқиқот объекти/ҳудуди, журнал/конференция номи ва ҳ.к.\n"
-            "Керак бўлмаса <b>—</b> юборинг."
-        ),
-        "confirm_summary": (
-            "📋 <b>Буюртмани текширинг:</b>\n\n"
-            "🧩 Тури: <b>{work}</b>\n"
-            "🌐 Тил: <b>{wlang}</b>\n"
-            "📌 Мавзу: {topic}\n"
-            "🔬 Соҳа: {field}\n"
-            "✍️ Муаллиф: {author}\n"
-            "🏷 Калит сўзлар: {keywords}\n"
-            "📄 Ҳажм: <b>{pages} бет</b>\n"
-            "📎 Қўшимча: {extra}\n\n"
-            "💰 Жами: <b>{total} сўм</b>"
-        ),
-        "btn_confirm": "✅ Тасдиқлаш",
-        "btn_edit": "✏️ Ўзгартириш",
-        "wt_article": "Мақола",
-        "wt_thesis": "Тезис",
-    },
-    "ru": {
-        "choose_language": "Тилни танланг / Выберите язык:",
-        "welcome": (
-            "👋 Здравствуйте!\n\n"
-            "Я бот, который пишет <b>научные статьи по требованиям ВАК (ОАК)</b>.\n\n"
-            "Статья готовится по следующей структуре:\n"
-            "• УДК\n"
-            "• Заголовок\n"
-            "• Аннотация и ключевые слова (узб., рус., англ.)\n"
-            "• Введение\n"
-            "• Основная часть (анализ и методы)\n"
-            "• Результаты и их обсуждение\n"
-            "• Заключение\n"
-            "• Список использованной литературы\n\n"
-            "Чтобы начать, отправьте команду /new."
-        ),
-        "menu_new": "📝 Написать новую статью — /new",
-        "menu_lang": "🌐 Сменить язык — /lang",
-        "menu_help": "ℹ️ Помощь — /help",
-        "ask_topic": (
-            "📌 <b>1/4</b> Введите тему статьи.\n\n"
-            "Например: <i>«Развитие малого бизнеса в условиях цифровой экономики»</i>"
-        ),
-        "ask_field": (
-            "🔬 <b>2/4</b> Введите научную область (направление).\n\n"
-            "Например: <i>экономика, педагогика, информационные технологии, медицина...</i>"
-        ),
-        "ask_author": (
-            "✍️ <b>3/4</b> Введите данные автора "
-            "(Ф.И.О., должность, организация).\n\n"
-            "Например: <i>Каримов А.А., базовый докторант, ТГЭУ</i>\n\n"
-            "Если не нужно — отправьте символ <b>—</b>."
-        ),
-        "ask_keywords": (
-            "🏷 <b>4/5</b> Введите ключевые слова (через запятую).\n\n"
-            "Если хотите, чтобы бот подобрал сам — отправьте символ <b>—</b>."
-        ),
-        "ask_pages": (
-            "📄 <b>5/5</b> Сколько страниц должна быть статья?\n\n"
-            "Введите число от {min} до {max}."
-        ),
-        "choose_kind": (
-            "🧩 Выберите тип статьи ({pages} стр.):\n\n"
-            "📄 <b>Обычная</b> — текст, аннотация и литература.\n"
-            "    Цена: <b>{std} сум</b>\n\n"
-            "📊 <b>Premium</b> — с таблицами и диаграммами.\n"
-            "    Цена: <b>{prem} сум</b>"
-        ),
-        "btn_kind_standard": "📄 Обычная",
-        "btn_kind_premium": "📊 Premium (таблицы+диаграммы)",
-        "invalid_pages": (
-            "⚠️ Пожалуйста, введите целое число от {min} до {max}."
-        ),
-        "payment_info": (
-            "💳 <b>Оплата</b>\n\n"
-            "Объём статьи: <b>{pages} стр.</b>\n"
-            "Итого к оплате: <b>{total} сум</b>\n\n"
-            "Переведите оплату на пластиковую карту:\n"
-            "💳 <code>{card}</code>\n"
-            "👤 {holder}\n\n"
-            "После оплаты отправьте сюда <b>чек об оплате (скриншот/фото)</b> — "
-            "после подтверждения оплаты статья будет подготовлена и отправлена."
-        ),
-        "need_receipt": (
-            "📸 Пожалуйста, отправьте чек об оплате в виде <b>изображения (фото)</b>."
-        ),
-        "receipt_ok": "✅ Чек принят. Статья готовится...",
-        "receipt_pending": (
-            "✅ Ваш чек принят!\n\n"
-            "⏳ Оплата проверяется. После подтверждения статья будет "
-            "подготовлена и отправлена автоматически. Пожалуйста, подождите."
-        ),
+        "btn_approve": "✅ Tasdiqlash",
+        "btn_reject": "❌ Rad etish",
+        "admin_approved": "✅ Tasdiqlandi — ish tayyorlanmoqda.",
+        "admin_rejected": "❌ Rad etildi.",
+        "already_handled": "Bu buyurtma allaqachon ko'rib chiqilgan.",
         "payment_rejected": (
-            "❌ К сожалению, оплата не подтверждена.\n\n"
-            "Пожалуйста, проверьте оплату и отправьте чек снова или "
-            "оформите новый заказ через /new."
+            "❌ Afsuski, to'lov tasdiqlanmadi.\n\n"
+            "Iltimos, to'lovni tekshirib, chekni qaytadan yuboring yoki /new "
+            "orqali yangi buyurtma bering."
         ),
-        "btn_approve": "✅ Подтвердить",
-        "btn_reject": "❌ Отклонить",
-        "admin_approved": "✅ Подтверждено — статья готовится.",
-        "admin_rejected": "❌ Отклонено.",
-        "already_handled": "Этот заказ уже обработан.",
-        "your_id": (
-            "🆔 Ваш Telegram ID: <code>{id}</code>\n\n"
-            "Его можно указать как админ (владелец)."
-        ),
-        "choose_method": (
-            "💳 Выберите способ оплаты.\n\n"
-            "Объём статьи: <b>{pages} стр.</b>\n"
-            "Итого к оплате: <b>{total} сум</b>"
-        ),
-        "btn_payme": "💳 Payme",
-        "btn_click": "💳 Click",
-        "btn_card": "🧾 Карта + чек",
-        "btn_pay": "💳 Оплатить",
-        "online_pay_msg": (
-            "💳 Оплатите по кнопке ниже.\n"
-            "После успешной оплаты статья будет отправлена <b>автоматически</b>."
-        ),
-        "payment_confirmed": "✅ Оплата принята! Спасибо.",
+        "your_id": "🆔 Sizning Telegram ID: <code>{id}</code>",
+        # --- Yetkazish ---
+        "payment_confirmed": "✅ To'lov qabul qilindi! Rahmat.",
         "generating": (
-            "⏳ Статья готовится... Это может занять 1–3 минуты.\n"
-            "Пожалуйста, подождите."
+            "⏳ Ish tayyorlanmoqda... Bu 1–3 daqiqa davom etishi mumkin.\n"
+            "Iltimos, kutib turing."
         ),
-        "done_text": "✅ Статья готова! Ниже текст и файл Word (.docx):",
+        "done_text": "✅ Ish tayyor! Quyida matn va Word (.docx) fayli:",
+        "docx_caption": "📄 Word formatidagi ish",
+        "pdf_caption": "📕 PDF formatidagi ish",
         "after_delivery": (
-            "🎉 Ваша статья готова!\n\n"
-            "🆕 Чтобы заказать новую статью, нажмите кнопку ниже.\n"
-            "✍️ Если есть отзыв, жалоба или предложение — свяжитесь с нами."
+            "🎉 Ishingiz tayyor bo'ldi!\n\n"
+            "🆕 Yangi ish buyurtma qilish uchun pastdagi tugmani bosing.\n"
+            "✍️ Fikr, shikoyat yoki taklifingiz bo'lsa — biz bilan bog'laning."
         ),
-        "btn_new_article": "🆕 Новая статья",
-        "btn_feedback": "✍️ Жалоба / Предложение",
-        "docx_caption": "📄 Статья в формате Word",
-        "error": "❌ Произошла ошибка:\n<code>{err}</code>\nПопробуйте снова через /new.",
-        "cancelled": "Отменено. Для новой статьи отправьте /new.",
+        "btn_new_article": "🆕 Yangi ish",
+        "btn_feedback": "✍️ Shikoyat / Taklif",
+        "error": (
+            "❌ Xatolik yuz berdi:\n<code>{err}</code>\n"
+            "Qaytadan /new orqali urinib ko'ring."
+        ),
+        "cancelled": "Bekor qilindi. Yangi ish uchun /new yuboring.",
+        # --- Buyruqlar ---
         "help": (
-            "ℹ️ <b>Помощь</b>\n\n"
-            "/new — написать новую научную статью\n"
-            "/status — статус ваших заказов\n"
-            "/lang — сменить язык интерфейса\n"
-            "/cancel — отменить текущий процесс\n"
-            "/help — эта справка\n\n"
-            "Бот готовит статьи и тезисы по требованиям ВАК (ОАК) "
-            "и отправляет их в виде файлов Word и PDF.\n"
-            "📄 Статья — {article} сум/стр.\n"
-            "📝 Тезис — {thesis} сум/стр.\n"
-            "После оплаты работа готовится."
+            "ℹ️ <b>Yordam</b>\n\n"
+            "/new — yangi maqola yoki tezis\n"
+            "/status — buyurtmalaringiz holati\n"
+            "/cancel — joriy jarayonni bekor qilish\n"
+            "/help — ushbu yordam\n\n"
+            "Bot OAK talablari asosida maqola va tezis tayyorlaydi, Word hamda "
+            "PDF faylda yuboradi.\n"
+            "📄 Maqola — {article} so'm/bet\n"
+            "📝 Tezis — {thesis} so'm/bet\n"
+            "Ish qaysi tilda (o'zbek/rus/ingliz) yozilishini buyurtma oxirida "
+            "tanlaysiz. To'lovdan keyin ish tayyorlanadi."
         ),
-        "lang_set": "✅ Язык установлен на русский.",
-        "skip_hint": "(чтобы пропустить — отправьте символ —)",
-        "receipt_forwarded": (
-            "🧾 Новый чек об оплате!\n"
-            "👤 Клиент: {user}\n"
-            "📄 Тема: {topic}\n"
-            "📃 Объём: {pages} стр.\n"
-            "💰 Сумма: {total} сум"
-        ),
-        "pdf_caption": "📕 Статья в формате PDF",
-        "status_empty": "У вас пока нет заказов. Начните через /new.",
-        "status_header": "📋 <b>Ваши последние заказы:</b>",
+        "status_empty": "Sizda hali buyurtmalar yo'q. /new orqali boshlang.",
+        "status_header": "📋 <b>So'nggi buyurtmalaringiz:</b>",
         "status_line": (
-            "📄 {topic}\n"
-            "📃 {pages} стр. · 💰 {total} сум\n"
-            "📌 Статус: {status}"
+            "📄 {topic}\n📃 {pages} bet · 💰 {total} so'm\n📌 Holat: {status}"
         ),
-        "st_created": "⏳ Ожидает оплаты",
-        "st_paid": "✅ Оплачено",
-        "st_delivering": "✍️ Готовится",
-        "st_delivered": "📨 Отправлено",
-        "st_cancelled": "❌ Отменено",
-        "stats_denied": "⛔ Эта команда только для админа.",
+        "st_created": "⏳ To'lov kutilmoqda",
+        "st_paid": "✅ To'langan",
+        "st_delivering": "✍️ Tayyorlanmoqda",
+        "st_delivered": "📨 Yuborilgan",
+        "st_cancelled": "❌ Bekor qilingan",
+        "stats_denied": "⛔ Bu buyruq faqat admin uchun.",
         "stats_body": (
-            "📊 <b>Статистика</b>\n\n"
-            "Всего заказов: <b>{total}</b>\n"
-            "Оплачено: <b>{paid}</b>\n"
-            "Отправлено: <b>{delivered}</b>\n"
-            "Общий доход: <b>{revenue} сум</b>"
+            "📊 <b>Statistika</b>\n\n"
+            "Jami buyurtmalar: <b>{total}</b>\n"
+            "To'langan: <b>{paid}</b>\n"
+            "Yuborilgan: <b>{delivered}</b>\n"
+            "Jami daromad: <b>{revenue} so'm</b>"
         ),
-        # --- Фаза 1 ---
-        "choose_worktype": "🧩 <b>Выберите тип работы:</b>",
-        "btn_article": "📄 Статья",
-        "btn_thesis": "📝 Тезис",
-        "ask_work_language": "🌐 <b>На каком языке подготовить работу?</b>",
-        "ask_field": (
-            "🔬 <b>Выберите научную область</b> (или нажмите «Другое» и впишите):"
-        ),
-        "btn_field_other": "✍️ Другое",
-        "ask_field_other": "🔬 Впишите научную область (направление):",
-        "ask_author_full": (
-            "✍️ <b>Данные автора:</b>\n"
-            "Ф.И.О., место работы/учёбы, должность или статус (студент, магистрант, "
-            "докторант, преподаватель…), e-mail.\n"
-            "Необязательно: ORCID, научный руководитель.\n\n"
-            "Напишите всё одним сообщением. Если не нужно — отправьте <b>—</b>."
-        ),
-        "ask_extra": (
-            "📎 <b>Дополнительные пожелания</b> (необязательно):\n"
-            "объект/регион исследования, название журнала/конференции и т.д.\n"
-            "Если не нужно — отправьте <b>—</b>."
-        ),
-        "confirm_summary": (
-            "📋 <b>Проверьте заказ:</b>\n\n"
-            "🧩 Тип: <b>{work}</b>\n"
-            "🌐 Язык: <b>{wlang}</b>\n"
-            "📌 Тема: {topic}\n"
-            "🔬 Область: {field}\n"
-            "✍️ Автор: {author}\n"
-            "🏷 Ключевые слова: {keywords}\n"
-            "📄 Объём: <b>{pages} стр.</b>\n"
-            "📎 Дополнительно: {extra}\n\n"
-            "💰 Итого: <b>{total} сум</b>"
-        ),
-        "btn_confirm": "✅ Подтвердить",
-        "btn_edit": "✏️ Изменить",
-        "wt_article": "Статья",
-        "wt_thesis": "Тезис",
-    },
-    "en": {
-        "choose_language": "Тилни танланг / Выберите язык / Choose language:",
-        "welcome": (
-            "👋 Hello!\n\n"
-            "I am a bot that writes <b>scientific articles and theses</b> "
-            "to OAK (VAK) standards.\n\n"
-            "To start, send /new."
-        ),
-        "ask_topic": (
-            "📌 Enter the <b>topic</b> of the work.\n\n"
-            "For example: <i>«Development of small business in the digital economy»</i>"
-        ),
-        "invalid_pages": "⚠️ Please enter a whole number between {min} and {max}.",
-        "payment_info": (
-            "💳 <b>Payment</b>\n\n"
-            "Volume: <b>{pages} pages</b>\n"
-            "Total: <b>{total} sum</b>\n\n"
-            "Transfer to the card below:\n"
-            "💳 <code>{card}</code>\n"
-            "👤 {holder}\n\n"
-            "After paying, send the <b>receipt (screenshot/photo)</b> here — "
-            "the work will be prepared once the payment is confirmed."
-        ),
-        "need_receipt": "📸 Please send the payment receipt as an <b>image (photo)</b>.",
-        "receipt_ok": "✅ Receipt received. Preparing the work...",
-        "receipt_pending": (
-            "✅ Your receipt has been received!\n\n"
-            "⏳ Payment is being verified. Once confirmed, the work will be "
-            "prepared and sent automatically. Please wait."
-        ),
-        "payment_rejected": (
-            "❌ Unfortunately, the payment was not confirmed.\n\n"
-            "Please check the payment and resend the receipt, or start a new "
-            "order via /new."
-        ),
-        "btn_approve": "✅ Approve",
-        "btn_reject": "❌ Reject",
-        "admin_approved": "✅ Approved — the work is being prepared.",
-        "admin_rejected": "❌ Rejected.",
-        "already_handled": "This order has already been handled.",
-        "your_id": "🆔 Your Telegram ID: <code>{id}</code>",
-        "choose_method": (
-            "💳 Choose a payment method.\n\n"
-            "Volume: <b>{pages} pages</b>\n"
-            "Total: <b>{total} sum</b>"
-        ),
-        "btn_payme": "💳 Payme",
-        "btn_click": "💳 Click",
-        "btn_card": "🧾 Card + receipt",
-        "btn_pay": "💳 Pay",
-        "online_pay_msg": (
-            "💳 Pay via the button below.\n"
-            "After a successful payment the work will be sent <b>automatically</b>."
-        ),
-        "payment_confirmed": "✅ Payment received! Thank you.",
-        "generating": (
-            "⏳ Preparing the work... This may take 1–3 minutes.\nPlease wait."
-        ),
-        "done_text": "✅ Done! Below is the text and the Word (.docx) file:",
-        "after_delivery": (
-            "🎉 Your work is ready!\n\n"
-            "🆕 To order a new work, tap the button below.\n"
-            "✍️ For feedback, a complaint or a suggestion — contact us."
-        ),
-        "btn_new_article": "🆕 New work",
-        "btn_feedback": "✍️ Complaint / Suggestion",
-        "docx_caption": "📄 Work in Word format",
-        "pdf_caption": "📕 Work in PDF format",
-        "error": "❌ An error occurred:\n<code>{err}</code>\nTry again via /new.",
-        "cancelled": "Cancelled. Send /new for a new work.",
-        "help": (
-            "ℹ️ <b>Help</b>\n\n"
-            "/new — order a new article or thesis\n"
-            "/status — your orders\n"
-            "/lang — change interface language\n"
-            "/cancel — cancel the current process\n"
-            "/help — this help\n\n"
-            "The bot prepares the work to OAK (VAK) standards and sends Word and "
-            "PDF files."
-        ),
-        "lang_set": "✅ Language set to English.",
-        "receipt_forwarded": (
-            "🧾 New payment receipt!\n"
-            "👤 Client: {user}\n"
-            "📄 Topic: {topic}\n"
-            "📃 Volume: {pages} pages\n"
-            "💰 Amount: {total} sum"
-        ),
-        "status_empty": "You have no orders yet. Start via /new.",
-        "status_header": "📋 <b>Your recent orders:</b>",
-        "status_line": (
-            "📄 {topic}\n📃 {pages} pages · 💰 {total} sum\n📌 Status: {status}"
-        ),
-        "st_created": "⏳ Awaiting payment",
-        "st_paid": "✅ Paid",
-        "st_delivering": "✍️ Preparing",
-        "st_delivered": "📨 Sent",
-        "st_cancelled": "❌ Cancelled",
-        "stats_denied": "⛔ This command is for the admin only.",
-        "stats_body": (
-            "📊 <b>Statistics</b>\n\n"
-            "Total orders: <b>{total}</b>\n"
-            "Paid: <b>{paid}</b>\n"
-            "Sent: <b>{delivered}</b>\n"
-            "Total revenue: <b>{revenue} sum</b>"
-        ),
-        "choose_worktype": "🧩 <b>Choose the type of work:</b>",
-        "btn_article": "📄 Article",
-        "btn_thesis": "📝 Thesis",
-        "ask_work_language": "🌐 <b>In which language should the work be written?</b>",
-        "ask_field": (
-            "🔬 <b>Choose the scientific field</b> (or tap «Other» to type it):"
-        ),
-        "btn_field_other": "✍️ Other",
-        "ask_field_other": "🔬 Type the scientific field (specialization):",
-        "ask_author_full": (
-            "✍️ <b>Author details:</b>\n"
-            "Full name, workplace/university, position or status (student, master's "
-            "student, PhD student, teacher…), e-mail.\n"
-            "Optional: ORCID, supervisor.\n\n"
-            "Send it all in one message. If not needed, send <b>—</b>."
-        ),
-        "ask_keywords": (
-            "🏷 Enter <b>keywords</b> (comma-separated).\n\n"
-            "To let the bot choose, send <b>—</b>."
-        ),
-        "ask_pages": (
-            "📄 How many pages should the work be?\n\n"
-            "Enter a number between {min} and {max}."
-        ),
-        "ask_extra": (
-            "📎 <b>Additional wishes</b> (optional):\n"
-            "research object/region, journal/conference name, etc.\n"
-            "If not needed, send <b>—</b>."
-        ),
-        "confirm_summary": (
-            "📋 <b>Please review your order:</b>\n\n"
-            "🧩 Type: <b>{work}</b>\n"
-            "🌐 Language: <b>{wlang}</b>\n"
-            "📌 Topic: {topic}\n"
-            "🔬 Field: {field}\n"
-            "✍️ Author: {author}\n"
-            "🏷 Keywords: {keywords}\n"
-            "📄 Volume: <b>{pages} pages</b>\n"
-            "📎 Additional: {extra}\n\n"
-            "💰 Total: <b>{total} sum</b>"
-        ),
-        "btn_confirm": "✅ Confirm",
-        "btn_edit": "✏️ Edit",
-        "wt_article": "Article",
-        "wt_thesis": "Thesis",
     },
 }
 
 
 def t(lang: str, key: str, **kwargs) -> str:
-    """Tarjima matnini olish; til topilmasa o'zbekchaga qaytadi."""
-    lang = lang if lang in TEXTS else "uz"
-    text = TEXTS[lang].get(key, TEXTS["uz"].get(key, key))
+    """Interfeys matnini olish. Interfeys doim o'zbek (lotin) tilida."""
+    text = TEXTS["uz"].get(key, key)
     return text.format(**kwargs) if kwargs else text
