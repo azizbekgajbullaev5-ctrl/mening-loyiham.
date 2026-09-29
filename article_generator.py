@@ -252,13 +252,24 @@ def _thesis_prompt(req: ArticleRequest, evidence: str = "") -> str:
     )
 
 
+# Apostrofga o'xshash barcha belgilar (' ' ' ` ʼ ʻ ʹ ´ ‛)
+_OG_APOS = "['’‘`ʼʻʹ´‛]"
+# Tutuq belgisi uchun — U+02BB (ʻ) dan tashqari (u faqat o/g dan keyin ishlatiladi)
+_TUT_APOS = "['’‘`ʼʹ´‛]"
+_OG_RE = re.compile(r"([oOgG])" + _OG_APOS)
+_TUT_RE = re.compile(_TUT_APOS)
+
+
 def normalize_uz(text: str) -> str:
-    """O'zbek lotin imlosi: o' -> oʻ, g' -> gʻ, qolgan ' -> ʼ (tutuq belgisi)."""
+    """O'zbek lotin imlosi:
+      - o/O yoki g/G dan keyingi har qanday apostrof -> ʻ (U+02BB):  oʻ, gʻ
+      - qolgan har qanday apostrof -> ʼ (U+02BC) tutuq belgisi:  maʼno
+    Model qaysi turdagi apostrof ishlatishidan qat'i nazar to'g'rilaydi.
+    """
     if not text:
         return text
-    for a, b in (("o'", "oʻ"), ("O'", "Oʻ"), ("g'", "gʻ"), ("G'", "Gʻ")):
-        text = text.replace(a, b)
-    return text.replace("'", "ʼ").replace("’", "ʼ")
+    text = _OG_RE.sub(lambda m: m.group(1) + "ʻ", text)
+    return _TUT_RE.sub("ʼ", text)
 
 
 def _normalize_tree(obj):
