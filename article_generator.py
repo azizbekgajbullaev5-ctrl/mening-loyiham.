@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from anthropic import AsyncAnthropic
 
 import config
+import paging
 import sources
 
 logger = logging.getLogger(__name__)
@@ -308,6 +309,93 @@ def _apply_citations(article: dict, srcs: list, is_thesis: bool) -> None:
         article["references"] = [s.gost() for s in srcs[:limit]]
 
 
+_BODY_FIELDS = {
+    True: ["body"],
+    False: ["introduction", "methods", "results", "discussion", "conclusion"],
+}
+
+
+def _word_count(article: dict, is_thesis: bool) -> int:
+    return sum(len((article.get(f) or "").split()) for f in _BODY_FIELDS[is_thesis])
+
+
+async def _adjust_length(req: ArticleRequest, article: dict,
+                         target_words: int, is_thesis: bool) -> dict:
+    """Matnni berilgan so'z soniga moslab kengaytiradi yoki qisqartiradi."""
+    cur = _word_count(article, is_thesis)
+    if target_words > cur:
+        task = ("MATNNI KENGAYTIRING: chuqurroq tahlil, misollar va mavjud "
+                "manbalarga qo'shimcha havolalar bilan. 'Suv' yoki takror qo'shmang.")
+    else:
+        task = ("MATNNI QISQARTIRING: 'suv', takror va ortiqcha jumlalarni olib "
+                "tashlang, mazmun saqlansin.")
+    schema = THESIS_SCHEMA if is_thesis else ARTICLE_SCHEMA
+    prompt = (
+        "Quyida ilmiy ish JSON ko'rinishida berilgan. Uning HAJMINI moslashtiring.\n\n"
+        f"HOZIRGI HAJM: ~{cur} so'z. KERAKLI HAJM: ~{target_words} so'z.\n"
+        f"VAZIFA: {task}\n\n"
+        "QAT'IY SHARTLAR:\n"
+        "- Til, tuzilma va uslub o'zgarmasin.\n"
+        "- Barcha [n] iqtiboslar va 'references' ro'yxati AYNAN saqlansin "
+        "(yangi manba qo'shmang, raqamlarni o'zgartirmang).\n"
+        "- 'tables' va 'charts' o'zgarmasin.\n"
+        "- Faqat asosiy matn uzunligini o'zgartiring; boshqa maydonlar o'sha-o'sha.\n\n"
+        "JORIY ISH (JSON):\n" + json.dumps(article, ensure_ascii=False)
+    )
+    max_tokens = min(48000, 6000 + target_words * 4)
+    async with _client.messages.stream(
+        model=config.CLAUDE_MODEL,
+        max_tokens=max_tokens,
+        thinking={"type": "adaptive"},
+        output_config={
+            "effort": "high",
+            "format": {"type": "json_schema", "schema": schema},
+        },
+        messages=[{"role": "user", "content": prompt}],
+    ) as stream:
+        message = await stream.get_final_message()
+    text = next((b.text for b in message.content if b.type == "text"), "")
+    new = json.loads(text)
+    # Butunlikni kafolatlash uchun manba/jadval/diagrammani asl holicha saqlaymiz
+    new["work_type"] = req.work_type
+    new["references"] = article.get("references", new.get("references", []))
+    if not is_thesis:
+        new["tables"] = article.get("tables", new.get("tables", []))
+        new["charts"] = article.get("charts", new.get("charts", []))
+    return new
+
+
+async def _fit_pages(req: ArticleRequest, article: dict, is_thesis: bool) -> dict:
+    """LibreOffice orqali bet sonini o'lchab, kerak bo'lsa matnni moslaydi."""
+    if not paging.soffice_bin():
+        return article  # LibreOffice yo'q — moslashuvsiz
+    from docx_builder import build_docx
+
+    target = max(1, req.pages)
+    for attempt in range(3):
+        try:
+            docx_bytes = build_docx(article, req.author, req.lang).getvalue()
+        except Exception:  # noqa: BLE001
+            logger.warning("Bet o'lchash uchun docx tuzishда xatolik", exc_info=True)
+            return article
+        pages = await paging.docx_page_count(docx_bytes)
+        logger.info("Bet: %s / kerak: %s (urinish %s)", pages, target, attempt + 1)
+        if not pages or pages == target:
+            return article
+        cur = _word_count(article, is_thesis)
+        wpp = cur / max(1, pages)
+        target_words = max(120, int(round(wpp * target)))
+        # oxirgi bet ~70% to'la bo'lishi uchun ozgina qo'shamiz (kam bo'lsa)
+        if pages < target:
+            target_words = int(target_words * 1.05)
+        try:
+            article = await _adjust_length(req, article, target_words, is_thesis)
+        except Exception:  # noqa: BLE001
+            logger.warning("Hajmni moslashда xatolik", exc_info=True)
+            return article
+    return article
+
+
 async def generate_article(req: ArticleRequest) -> dict:
     """Maqola yoki tezisni real manbalar asosida generatsiya qiladi."""
     is_thesis = req.work_type == config.WORK_THESIS
@@ -347,6 +435,12 @@ async def generate_article(req: ArticleRequest) -> dict:
     # 3) Iqtiboslarni real manbalarga bog'lash
     if srcs:
         _apply_citations(article, srcs, is_thesis)
+
+    # 4) Sahifa sonini aniq moslash (LibreOffice bo'lsa)
+    try:
+        article = await _fit_pages(req, article, is_thesis)
+    except Exception:  # noqa: BLE001
+        logger.warning("Sahifa moslash umumiy xatosi", exc_info=True)
 
     if req.lang == "uz":
         article = _normalize_tree(article)

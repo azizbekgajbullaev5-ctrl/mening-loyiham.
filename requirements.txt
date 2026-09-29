@@ -5,3 +5,4 @@ fpdf2==2.8.1
 python-dotenv==1.0.1
 matplotlib==3.9.2
 aiohttp>=3.9
+pypdf>=4.0
